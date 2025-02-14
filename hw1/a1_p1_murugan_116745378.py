@@ -10,6 +10,7 @@ from typing import List
 def wordTokenizer(sent: str) -> List[str]:
     """Split a string into list of tokens matched by regex"""
     # TODO: Need to check if the regex is accurate enough
+    # TODO: A. should be captured as ["A", "."] and not ["A."]
     pattern = re.compile(
         r"(?:[A-Z]\.)+|[A-z]+'[A-z]+|\d+\.\d+|[.,:;'`]|[@#]?[A-Za-z0-9]+|\S+"
     )
@@ -49,15 +50,21 @@ def main() -> None:
     with open(args.filepath, "r") as f:
         data = f.read().splitlines()
 
-    print("Checkpoint 1.1:")
+    # Create and open output file
+    outfile = open("a1_p1_murugan_116745378_OUTPUT.txt", "w")
 
     # Tokenize and print first 5 and last doc in input data
+    outfile.write("Checkpoint 1.1:\n")
     test_data = data[:5] + (data[-1:] if len(data) > 5 else [])
     for s in test_data:
         result = wordTokenizer(s)
-        print(result)
+        result_string = ",".join(result) + "\n"
+        outfile.write(result_string)
 
-    print("Checkpoint 1.2:")
+    outfile.write("Checkpoint 1.2:\n")
+
+    # Close output file
+    outfile.close()
 
     return None
 
