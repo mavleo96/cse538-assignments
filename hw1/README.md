@@ -131,17 +131,15 @@ Place code that learns the vocabulary in a method named `spacelessBPElearn`, and
 
 ```python
 def spacelessBPELearn(docs, max_vocabulary=1000):
-
-    #input: docs, a list of strings to be used as the corpus for learning the BPE vocabulary
-    #output: final_vocabulary, a set of all members of the learned vocabulary
+    # input: docs, a list of strings to be used as the corpus for learning the BPE vocabulary
+    # output: final_vocabulary, a set of all members of the learned vocabulary
 
    return final_vocabulary
 
 def spacelessBPETokenize(text, vocab):
-
-    #input: text, a single string to be word tokenized.
-    #       vocab, a set of valid vocabulary words
-    #output: words, a list of strings of all word tokens, in order, from the string
+    # input: text, a single string to be word tokenized.
+    #        vocab, a set of valid vocabulary words
+    # output: words, a list of strings of all word tokens, in order, from the string
 
    return words
 ```
@@ -172,18 +170,18 @@ Use the function `getConllTags` to load the data from daily547.conll. The functi
 
 ```python
 def getConllTags(filename):
-    #input: filename for a conll style parts of speech tagged file
-    #output: a list of list of tuples [sent]. representing [[[word1, tag], [word2, tag2]]
+    # input: filename for a conll style parts of speech tagged file
+    # output: a list of list of tuples [sent]. representing [[[word1, tag], [word2, tag2]]
 
     wordTagsPerSent = [[]]
     sentNum = 0
     with open(filename, encoding='utf8') as f:
         for wordtag in f:
             wordtag=wordtag.strip()
-            if wordtag:#still reading current sentence
+            if wordtag: # still reading current sentence
                 (word, tag) = wordtag.split("\t")
                 wordTagsPerSent[sentNum].append((word,tag))
-            else:#new sentence
+            else: # new sentence
                 wordTagsPerSent.append([])
                 sentNum+=1
     return wordTagsPerSent
@@ -210,10 +208,10 @@ All features should be concatenated into one long flat vector.
 
 ```python
 def getFeaturesForTarget(tokens, targetI, wordToIndex):
-    #input: tokens: a list of tokens in a sentence,
-    #       targetI: index for the target token
-    #       wordToIndex: dict mapping ‘word’ to an index in the feature list.
-    #output: list (or np.array) of k feature values for the given target
+    # input: tokens: a list of tokens in a sentence,
+    #        targetI: index for the target token
+    #        wordToIndex: dict mapping ‘word’ to an index in the feature list.
+    # output: list (or np.array) of k feature values for the given target
 
     #<FILL IN>
 
@@ -235,11 +233,11 @@ Place your code in a method named `trainLogReg`.
 
 ```python
 def trainLogReg(train_data, dev_data, learning_rate, l2_penalty):
-    #input: train/dev_data - contain the features and labels for train/dev splits
-    #input: learning_rate, l2_penalty - hyperparameters for model training
-   #output: model - the trained pytorch model
-    #output: train/dev_losses - a list of train/dev set loss values from each epoch
-    #output: train/dev_accuracies - a list of train/dev set accuracy from each epoch
+    # input: train/dev_data - contain the features and labels for train/dev splits
+    # input: learning_rate, l2_penalty - hyperparameters for model training
+    # output: model - the trained pytorch model
+    # output: train/dev_losses - a list of train/dev set loss values from each epoch
+    # output: train/dev_accuracies - a list of train/dev set accuracy from each epoch
 
    return model, train_losses, train_accuracies, dev_losses, dev_accuracies
 ```
@@ -256,11 +254,11 @@ Place your code in a method named `crossVal`, which is able to evaluate any mode
 
 ```python
 def gridSearch(train_set, dev_set, learning_rates, l2_penalties):
-    #input: learning_rates, l2_penalties - each is a list with hyperparameters to try
-   #       train_set - the training set of features and outcomes
-   #       dev_set - the dev set of features and outcomes
-   #output: model_accuracies - dev set accuracy of the trained model on each hyperparam combination
-    #       best_lr, best_l2_penalty - learning rate and L2 penalty combination with highest dev set accuracy
+    # input: learning_rates, l2_penalties - each is a list with hyperparameters to try
+    #        train_set - the training set of features and outcomes
+    #        dev_set - the dev set of features and outcomes
+    # output: model_accuracies - dev set accuracy of the trained model on each hyperparam combination
+    #         best_lr, best_l2_penalty - learning rate and L2 penalty combination with highest dev set accuracy
 
    return model_accuracies, best_lr, best_l2_penalty
 ```
