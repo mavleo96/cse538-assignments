@@ -29,7 +29,7 @@ The Twitter POS annotated data was introduced in the paper [Part-of-Speech Taggi
 ### Part 1: [daily547_tweets.txt](https://drive.google.com/file/d/1OwbJQE2CpsCKuBGLu67PEobHQbCCBWUU/view)
 - **Description:** The file contains the 547 tweets, each on a different line. Consider each tweet a "document" that you will tokenize and store.
 
-### Part 2: [daily547_3pos.txt](https://drive.google.com/file/d/1fL4YoX3thkdKH1Cc7n3kFm1SzBjO12G4/view)
+### Part 2: [daily547_3pos.txt](https://drive.google.com/file/d/1u6iqtwkaEbJuMjk14QTw2X5sYDdZG9yL/view)
 - **Description:** Each line in this file contains either (1) a tab-separated token and its POS label, or (2) an empty line between the last and first tokens to denote the end of a sentence.
 - While the original version [daily547.conll](https://github.com/brendano/ark-tweet-nlp/blob/master/data/twpos-data-v0.3/daily547.conll) has 25 POS tags (defined in the linked paper), for this assignment we have aggregated them into **3 classes** as follows:  
 1. **Noun-related (N)** - originally labeled: `N, O, S, ^, Z, L, M, A`  
