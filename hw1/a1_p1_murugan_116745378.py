@@ -2,15 +2,23 @@
 
 import sys
 import argparse
+import re
+
+from typing import List
 
 
-def wordTokenizer(sent):
-    # input: a single sentence as a string.
-    # output: a list of each “word” in the text
-    # must use regular expressions
+def wordTokenizer(sent: str) -> List[str]:
+    """Split a string into list of tokens matched by regex"""
+    # TODO: Need to check if the regex is accurate enough
+    pattern = re.compile(
+        r"(?:[A-Z]\.)+|[A-z]+'[A-z]+|\d+\.\d+|[.,:;'`]|[@#]?[A-Za-z0-9]+|\S+"
+    )
+    tokens = re.findall(pattern, sent)
 
-    # <FILL IN>
-    tokens = None
+    # Check if tokens add back to original sentence
+    assert "".join(tokens) == "".join(
+        sent.split()
+    ), f"Tokens don't add up to original sentence\nTokens: {tokens}\nSentence: {sent}"
     return tokens
 
 
@@ -30,18 +38,24 @@ def spacelessBPETokenize(text, vocab):
 
 
 def main() -> None:
-    # parse arguments
+    # Parse arguments
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 1 part 1"
     )
     parser.add_argument("filepath", type=str, help="path to the input file")
     args = parser.parse_args()
 
-    # read and process input data
+    # Read and process input data
     with open(args.filepath, "r") as f:
         data = f.read().splitlines()
 
     print("Checkpoint 1.1:")
+
+    # Tokenize and print first 5 and last doc in input data
+    test_data = data[:5] + (data[-1:] if len(data) > 5 else [])
+    for s in test_data:
+        result = wordTokenizer(s)
+        print(result)
 
     print("Checkpoint 1.2:")
 
