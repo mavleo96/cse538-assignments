@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import argparse
 import re
@@ -51,7 +52,8 @@ def main() -> None:
         data = f.read().splitlines()
 
     # Create and open output file
-    outfile = open("a1_p1_murugan_116745378_OUTPUT.txt", "w")
+    os.makedirs("results", exist_ok=True)
+    outfile = open("results/a1_p1_murugan_116745378_OUTPUT.txt", "w")
 
     # Tokenize and print first 5 and last doc in input data
     outfile.write("Checkpoint 1.1:\n")

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import argparse
 
@@ -37,7 +38,8 @@ def main() -> None:
         data = f.read().splitlines()
 
     # Create and open output file
-    outfile = open("a1_p2_murugan_116745378_OUTPUT.txt", "w")
+    os.makedirs("results", exist_ok=True)
+    outfile = open("results/a1_p2_murugan_116745378_OUTPUT.txt", "w")
 
     outfile.write("Checkpoint 2.1:\n")
     outfile.write("Checkpoint 2.2:\n")
