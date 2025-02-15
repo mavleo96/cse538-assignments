@@ -250,7 +250,7 @@ Plot the training and dev set loss and accuracy curves. The plots have epochs as
 
 Improve your model by tuning hyperparameters related to learning rate and regularization. Using grid search for the model over dev set, you will try to find the best learning rates, trying `[0.05,0.5,5]` as well as find the best L2 penalty, trying `[0.001,0.01,0.1]`. Find the dev set accuracy over for each configuration.
 
-Place your code in a method named `crossVal`, which is able to evaluate any model it takes as input:
+Place your code in a method named `gridSearch`, which is able to evaluate any model it takes as input:
 
 ```python
 def gridSearch(train_set, dev_set, learning_rates, l2_penalties):
