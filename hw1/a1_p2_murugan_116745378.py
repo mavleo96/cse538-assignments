@@ -297,8 +297,8 @@ def main():
 
     # Hyperparameter grid search
     outfile.write("Checkpoint 2.3:\n")
-    learning_rates = [0.05, 0.5, 5]
-    l2_penalties = [0.001, 0.01, 0.1]
+    learning_rates = [0.1, 1, 10]
+    l2_penalties = [1e-5, 1e-3, 1e-1]
     model_accuracies, best_lr, best_l2_penalty = gridSearch(
         train_dataset, dev_dataset, learning_rates, l2_penalties
     )
