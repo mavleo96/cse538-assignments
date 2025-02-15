@@ -3,8 +3,11 @@
 import os
 import sys
 import argparse
+import numpy as np
 
-from typing import List
+from typing import List, Dict
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 
 
 def getConllTags(filename: str) -> List[List]:
@@ -25,15 +28,44 @@ def getConllTags(filename: str) -> List[List]:
     return wordTagsPerSent
 
 
-def getFeaturesForTarget(tokens, targetI, wordToIndex):
-    # input: tokens: a list of tokens in a sentence,
-    #        targetI: index for the target token
-    #        wordToIndex: dict mapping ‘word’ to an index in the feature list.
-    # output: list (or np.array) of k feature values for the given target
+def getFeaturesForTarget(
+    tokens: List[str], targetI: int, wordToIndex: Dict[str, int]
+) -> np.array:
+    """Return an array of features for a token in sentence"""
+    assert 0 <= targetI < len(tokens), "list index out of range"
 
-    # <FILL IN>
-    featureVector = None
-    return featureVector
+    ftarget_ascii = ord(tokens[targetI][0])
+
+    # Feature 1: Captizalied or not
+    capital = np.array([int(ord("A") <= ftarget_ascii <= ord("Z"))])
+
+    # Feature 2: First letter
+    f_array = np.zeros(257)
+    f_array[ftarget_ascii if ftarget_ascii < 256 else 256] = 1
+
+    # Feature 3: Length of token
+    length = np.array([len(tokens[targetI])])
+
+    # Feature 4: Previous token
+    previous_token = np.zeros(len(wordToIndex))
+    if targetI != 0:
+        previous_token[wordToIndex[tokens[targetI - 1]]] = 1
+
+    # Feature 5: Current token
+    current_token = np.zeros(len(wordToIndex))
+    current_token[wordToIndex[tokens[targetI]]] = 1
+
+    # Feature 6: Next token
+    next_token = np.zeros(len(wordToIndex))
+    if targetI != len(tokens) - 1:
+        next_token[wordToIndex[tokens[targetI + 1]]] = 1
+
+    # Concatenate all features into a single array
+    feature_vector = np.concatenate(
+        [capital, f_array, length, previous_token, current_token, next_token]
+    )
+
+    return feature_vector
 
 
 def trainLogReg(train_data, dev_data, learning_rate, l2_penalty):
@@ -71,7 +103,32 @@ def main() -> None:
     os.makedirs("results", exist_ok=True)
     outfile = open("results/a1_p2_murugan_116745378_OUTPUT.txt", "w")
 
+    # Create mapping dictionaries
+    unique_tokens = set(token for sentence in data for token, _ in sentence)
+    unique_postags = set(postag for sentence in data for _, postag in sentence)
+    token_index = {token: id for id, token in enumerate(unique_tokens)}
+    postag_index = {postag: id for id, postag in enumerate(unique_postags)}
+
+    # Create lexical feature set
     outfile.write("Checkpoint 2.1:\n")
+    X = np.array(
+        [
+            getFeaturesForTarget([i for i, _ in sentence], id, token_index)
+            for sentence in data
+            for id, _ in enumerate(sentence)
+        ]
+    )
+    y = np.array([postag_index[postag] for sentence in data for _, postag in sentence])
+
+    # Print feature vector sum for first and last 5 rows
+    test_data = np.vstack([X[:1, :], X[-5:, :]])
+    feature_vector_sum = ",".join(test_data.sum(1).astype(str))
+    outfile.write(feature_vector_sum + "\n")
+
+    # Shuffle and split train test data
+    X, y = shuffle(X, y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+
     outfile.write("Checkpoint 2.2:\n")
     outfile.write("Checkpoint 2.3:\n")
     outfile.write("Checkpoint 2.4:\n")
