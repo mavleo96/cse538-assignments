@@ -4,6 +4,7 @@ import os
 import sys
 import argparse
 import torch
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
@@ -103,6 +104,8 @@ def trainLogReg(
     l2_penalty: float,
 ) -> Tuple[nn.Module, List, List, List, List]:
     """Train a multiclass logistic regression model"""
+    EPOCHS = 200
+
     assert (
         train_data.tensors[0].shape[1] == dev_data.tensors[0].shape[1]
     ), "train_data and dev_data shape don't match on axis=1"
@@ -125,7 +128,7 @@ def trainLogReg(
     train_accuracies, dev_accuracies = [], []
 
     # Training Loop
-    for _ in range(200):
+    for _ in range(EPOCHS):
         for batch_X, batch_y in train_dataloader:
             optimizer.zero_grad()
             loss = loss_fn(model(batch_X), batch_y)
@@ -156,14 +159,75 @@ def trainLogReg(
     return model, train_losses, train_accuracies, dev_losses, dev_accuracies
 
 
-def gridSearch(train_set, dev_set, learning_rates, l2_penalties):
-    # input: learning_rates, l2_penalties - each is a list with hyperparameters to try
-    #        train_set - the training set of features and outcomes
-    #        dev_set - the dev set of features and outcomes
-    # output: model_accuracies - dev set accuracy of the trained model on each hyperparam combination
-    #         best_lr, best_l2_penalty - learning rate and L2 penalty combination with highest dev set accuracy
-    model_accuracies = best_lr = best_l2_penalty = None
+def gridSearch(
+    train_set: TensorDataset,
+    dev_set: TensorDataset,
+    learning_rates: List[float],
+    l2_penalties: List[float],
+) -> Tuple[List[Tuple[float, float, float]], float, float]:
+    """Perform grid search to find the best hyperparameters"""
+
+    model_accuracies = []
+    # Iterate over all combinations of learning rates and l2 penalties
+    for lr, l2 in itertools.product(learning_rates, l2_penalties):
+        _, _, _, _, dev_accuracies = trainLogReg(train_set, dev_set, lr, l2)
+        model_accuracies.append((lr, l2, dev_accuracies[-1]))
+
+    # Find the best learning rate and l2 penalty
+    best_lr, best_l2_penalty, _ = max(model_accuracies, key=lambda x: x[2])
+
     return model_accuracies, best_lr, best_l2_penalty
+
+
+def convert_to_table(model_accuracies: List[Tuple[float, float, float]]) -> str:
+    """Convert model accuracies to a table with l2 penalty column and learning rate rows"""
+    # TODO: Need to fix this
+    table = "l2 penalty\t"
+    table += "\t".join([f"{lr:.2f}" for lr, _, _ in model_accuracies]) + "\n"
+
+    for l2, _, _ in model_accuracies:
+        table += f"{l2:.3f}\t"
+        table += "\t".join(
+            [
+                f"{acc:.3f}"
+                for _, l2_penalty, acc in model_accuracies
+                if l2_penalty == l2
+            ]
+        )
+        table += "\n"
+
+    return table
+
+
+def plot_loss_and_accuracy(
+    train_losses: List[float],
+    dev_losses: List[float],
+    train_accuracies: List[float],
+    dev_accuracies: List[float],
+    filename: str,
+) ->  None:
+    """Plot loss and accuracy for training and dev data"""
+    # Create a figure with two subplots
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    # Plot loss on left y-axis
+    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
+    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
+    ax1.set_xlabel("Epochs")
+    ax1.set_ylabel("Loss")
+    ax1.legend(loc="upper left")
+    ax1.grid()
+
+    # Create a second y-axis for accuracy
+    ax2 = ax1.twinx()
+    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
+    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
+    ax2.set_ylabel("Accuracy")
+    ax2.legend(loc="upper right")
+
+    # Save the plot
+    plt.title("Training & Dev Loss and Accuracy")
+    plt.savefig(filename, dpi=300, bbox_inches="tight")
 
 
 def main():
@@ -217,36 +281,49 @@ def main():
 
     train_dataset, dev_dataset = TensorDataset(Xt, yt), TensorDataset(Xd, yd)
 
-    # Train logistic regression
+    # Train logistic regression with lr 0.01 and l2 penalty 0.01
     outfile.write("Checkpoint 2.2:\n")
-
     _, train_losses, train_accuracies, dev_losses, dev_accuracies = trainLogReg(
         train_dataset, dev_dataset, 0.01, 0.01
     )
+    plot_loss_and_accuracy(
+        train_losses,
+        dev_losses,
+        train_accuracies,
+        dev_accuracies,
+        "results/training_plot.png",
+    )
 
-    # Create a figure with two subplots
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-
-    # Plot loss on left y-axis
-    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
-    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
-    ax1.set_xlabel("Epochs")
-    ax1.set_ylabel("Loss")
-    ax1.legend(loc="upper left")
-    ax1.grid()
-
-    # Create a second y-axis for accuracy
-    ax2 = ax1.twinx()
-    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
-    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
-    ax2.set_ylabel("Accuracy")
-    ax2.legend(loc="upper right")
-
-    # Save the plot
-    plt.title("Training & Dev Loss and Accuracy")
-    plt.savefig("results/training_plot.png", dpi=300, bbox_inches="tight")
-
+    # Hyperparameter grid search
     outfile.write("Checkpoint 2.3:\n")
+    learning_rates = [0.05, 0.5, 5]
+    l2_penalties = [0.001, 0.01, 0.1]
+    model_accuracies, best_lr, best_l2_penalty = gridSearch(
+        train_dataset, dev_dataset, learning_rates, l2_penalties
+    )
+
+    # Print best hyperparameters and model accuracies
+    accuracy_table = convert_to_table(model_accuracies)
+    outfile.write(accuracy_table + "\n")
+    outfile.write(f"Best learning rate: {best_lr}\n")
+    outfile.write(f"Best l2 penalty: {best_l2_penalty}\n")
+
+    # Train logistic regression with best hyperparameters and plot loss and accuracy
+    (
+        _,
+        best_train_losses,
+        best_train_accuracies,
+        best_dev_losses,
+        best_dev_accuracies,
+    ) = trainLogReg(train_dataset, dev_dataset, best_lr, best_l2_penalty)
+    plot_loss_and_accuracy(
+        best_train_losses,
+        best_dev_losses,
+        best_train_accuracies,
+        best_dev_accuracies,
+        "results/best_training_plot.png",
+    )
+
     outfile.write("Checkpoint 2.4:\n")
 
     # Close output file
