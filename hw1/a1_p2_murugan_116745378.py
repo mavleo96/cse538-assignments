@@ -3,11 +3,20 @@
 import os
 import sys
 import argparse
+import torch
 import numpy as np
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
+np.random.seed(0)
+torch.manual_seed(0)
 
 
 def getConllTags(filename: str) -> List[List]:
@@ -68,13 +77,80 @@ def getFeaturesForTarget(
     return feature_vector
 
 
-def trainLogReg(train_data, dev_data, learning_rate, l2_penalty):
-    # input: train/dev_data - contain the features and labels for train/dev splits
-    # input: learning_rate, l2_penalty - hyperparameters for model training
-    # output: model - the trained pytorch model
-    # output: train/dev_losses - a list of train/dev set loss values from each epoch
-    # output: train/dev_accuracies - a list of train/dev set accuracy from each epoch
-    model = train_losses = train_accuracies = dev_losses = dev_accuracies = None
+class MulticlassLogisticRegression(nn.Module):
+    """Multiclass Logistic Regression Model"""
+
+    def __init__(self, dim: int, nclass: int) -> None:
+        """Initialize the model"""
+        super().__init__()
+        self.linear = nn.Linear(dim, nclass, dtype=torch.float32)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the model"""
+        x = self.linear(x)
+        x = self.log_softmax(x)
+
+        return x
+
+
+def trainLogReg(
+    train_data: TensorDataset,
+    dev_data: TensorDataset,
+    learning_rate: float,
+    l2_penalty: float,
+) -> Tuple[nn.Module, List, List, List, List]:
+    """Train a multiclass logistic regression model"""
+    assert (
+        train_data.tensors[0].shape[1] == dev_data.tensors[0].shape[1]
+    ), "train_data and dev_data shape don't match on axis=1"
+
+    feature_count = train_data.tensors[0].shape[1]
+    num_class = train_data.tensors[1].max().item() + 1
+
+    train_dataloader = DataLoader(
+        train_data, batch_size=len(train_data) // 100, shuffle=True
+    )
+
+    # Initialize model, loss function and optimizer
+    model = MulticlassLogisticRegression(feature_count, num_class)
+    loss_fn = nn.NLLLoss()
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=learning_rate, weight_decay=l2_penalty
+    )
+
+    train_losses, dev_losses = [], []
+    train_accuracies, dev_accuracies = [], []
+
+    # Training Loop
+    for _ in range(200):
+        for batch_X, batch_y in train_dataloader:
+            optimizer.zero_grad()
+            loss = loss_fn(model(batch_X), batch_y)
+            loss.backward()
+            optimizer.step()
+
+        with torch.no_grad():
+            # Evaluate on train and dev data
+            train_logprob_pred = model(train_data.tensors[0])
+            dev_logprob_pred = model(dev_data.tensors[0])
+
+            train_y_pred = train_logprob_pred.argmax(1).cpu().numpy()
+            dev_y_pred = dev_logprob_pred.argmax(1).cpu().numpy()
+
+            # Calculate & save loss and accuracy
+            train_losses.append(
+                loss_fn(train_logprob_pred, train_data.tensors[1]).item()
+            )
+            dev_losses.append(loss_fn(dev_logprob_pred, dev_data.tensors[1]).item())
+
+            train_accuracies.append(
+                accuracy_score(train_data.tensors[1].cpu().numpy(), train_y_pred)
+            )
+            dev_accuracies.append(
+                accuracy_score(dev_data.tensors[1].cpu().numpy(), dev_y_pred)
+            )
+
     return model, train_losses, train_accuracies, dev_losses, dev_accuracies
 
 
@@ -88,7 +164,7 @@ def gridSearch(train_set, dev_set, learning_rates, l2_penalties):
     return model_accuracies, best_lr, best_l2_penalty
 
 
-def main() -> None:
+def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 1 part 2"
@@ -125,11 +201,49 @@ def main() -> None:
     feature_vector_sum = ",".join(test_data.sum(1).astype(str))
     outfile.write(feature_vector_sum + "\n")
 
-    # Shuffle and split train test data
-    X, y = shuffle(X, y)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+    # Split and scale train test data
+    X_train, X_dev, y_train, y_dev = train_test_split(X, y, test_size=0.3)
+    scaler = np.maximum(X_train.max(0, keepdims=True), 1)
+    X_train /= scaler
+    X_dev /= scaler
 
+    # Create tensor objects
+    Xt = torch.tensor(X_train, dtype=torch.float32)
+    yt = torch.tensor(y_train, dtype=torch.long)
+    Xd = torch.tensor(X_dev, dtype=torch.float32)
+    yd = torch.tensor(y_dev, dtype=torch.long)
+
+    train_dataset, dev_dataset = TensorDataset(Xt, yt), TensorDataset(Xd, yd)
+
+    # Train logistic regression
     outfile.write("Checkpoint 2.2:\n")
+
+    _, train_losses, train_accuracies, dev_losses, dev_accuracies = trainLogReg(
+        train_dataset, dev_dataset, 0.01, 0.01
+    )
+
+    # Create a figure with two subplots
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    # Plot loss on left y-axis
+    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
+    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
+    ax1.set_xlabel("Epochs")
+    ax1.set_ylabel("Loss")
+    ax1.legend(loc="upper left")
+    ax1.grid()
+
+    # Create a second y-axis for accuracy
+    ax2 = ax1.twinx()
+    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
+    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
+    ax2.set_ylabel("Accuracy")
+    ax2.legend(loc="upper right")
+
+    # Save the plot
+    plt.title("Training & Dev Loss and Accuracy")
+    plt.savefig("results/training_plot.png", dpi=300, bbox_inches="tight")
+
     outfile.write("Checkpoint 2.3:\n")
     outfile.write("Checkpoint 2.4:\n")
 
