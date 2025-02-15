@@ -25,6 +25,37 @@ def getConllTags(filename: str) -> List[List]:
     return wordTagsPerSent
 
 
+def getFeaturesForTarget(tokens, targetI, wordToIndex):
+    # input: tokens: a list of tokens in a sentence,
+    #        targetI: index for the target token
+    #        wordToIndex: dict mapping ‘word’ to an index in the feature list.
+    # output: list (or np.array) of k feature values for the given target
+
+    # <FILL IN>
+    featureVector = None
+    return featureVector
+
+
+def trainLogReg(train_data, dev_data, learning_rate, l2_penalty):
+    # input: train/dev_data - contain the features and labels for train/dev splits
+    # input: learning_rate, l2_penalty - hyperparameters for model training
+    # output: model - the trained pytorch model
+    # output: train/dev_losses - a list of train/dev set loss values from each epoch
+    # output: train/dev_accuracies - a list of train/dev set accuracy from each epoch
+    model = train_losses = train_accuracies = dev_losses = dev_accuracies = None
+    return model, train_losses, train_accuracies, dev_losses, dev_accuracies
+
+
+def gridSearch(train_set, dev_set, learning_rates, l2_penalties):
+    # input: learning_rates, l2_penalties - each is a list with hyperparameters to try
+    #        train_set - the training set of features and outcomes
+    #        dev_set - the dev set of features and outcomes
+    # output: model_accuracies - dev set accuracy of the trained model on each hyperparam combination
+    #         best_lr, best_l2_penalty - learning rate and L2 penalty combination with highest dev set accuracy
+    model_accuracies = best_lr = best_l2_penalty = None
+    return model_accuracies, best_lr, best_l2_penalty
+
+
 def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(
@@ -34,8 +65,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Read and process input data
-    with open(args.filepath, "r") as f:
-        data = f.read().splitlines()
+    data = getConllTags(args.filepath)
 
     # Create and open output file
     os.makedirs("results", exist_ok=True)
