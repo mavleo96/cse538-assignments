@@ -39,34 +39,36 @@ def getConllTags(filename: str) -> List[List]:
 
 def getFeaturesForTarget(
     tokens: List[str], targetI: int, wordToIndex: Dict[str, int]
-) -> np.array:
+) -> np.ndarray:
     """Return an array of features for a token in sentence"""
     assert 0 <= targetI < len(tokens), "list index out of range"
 
     ftarget_ascii = ord(tokens[targetI][0])
+    vocab_size = len(wordToIndex)
 
     # Feature 1: Captizalied or not
     capital = np.array([int(ord("A") <= ftarget_ascii <= ord("Z"))])
 
     # Feature 2: First letter
     f_array = np.zeros(257)
-    f_array[ftarget_ascii if ftarget_ascii < 256 else 256] = 1
+    f_array[min(ftarget_ascii, 256)] = 1
 
     # Feature 3: Length of token
     length = np.array([len(tokens[targetI])])
 
     # Feature 4: Previous token
-    previous_token = np.zeros(len(wordToIndex))
-    if targetI != 0:
+    previous_token = np.zeros(vocab_size)
+    if targetI != 0 and tokens[targetI - 1] in wordToIndex:
         previous_token[wordToIndex[tokens[targetI - 1]]] = 1
 
     # Feature 5: Current token
-    current_token = np.zeros(len(wordToIndex))
-    current_token[wordToIndex[tokens[targetI]]] = 1
+    current_token = np.zeros(vocab_size)
+    if tokens[targetI] in wordToIndex:
+        current_token[wordToIndex[tokens[targetI]]] = 1
 
     # Feature 6: Next token
-    next_token = np.zeros(len(wordToIndex))
-    if targetI != len(tokens) - 1:
+    next_token = np.zeros(vocab_size)
+    if targetI != len(tokens) - 1 and tokens[targetI + 1] in wordToIndex:
         next_token[wordToIndex[tokens[targetI + 1]]] = 1
 
     # Concatenate all features into a single array
@@ -180,21 +182,21 @@ def main():
     outfile = open("results/a1_p2_murugan_116745378_OUTPUT.txt", "w")
 
     # Create mapping dictionaries
-    unique_tokens = set(token for sentence in data for token, _ in sentence)
-    unique_postags = set(postag for sentence in data for _, postag in sentence)
-    token_index = {token: id for id, token in enumerate(unique_tokens)}
-    postag_index = {postag: id for id, postag in enumerate(unique_postags)}
+    unique_tokens = {t for s in data for t, _ in s}
+    unique_postags = {p for s in data for _, p in s}
+    token_index = {t: i for i, t in enumerate(unique_tokens)}
+    postag_index = {p: i for i, p in enumerate(unique_postags)}
 
     # Create lexical feature set
     outfile.write("Checkpoint 2.1:\n")
     X = np.array(
         [
-            getFeaturesForTarget([i for i, _ in sentence], id, token_index)
-            for sentence in data
-            for id, _ in enumerate(sentence)
+            getFeaturesForTarget([t for t, _ in s], i, token_index)
+            for s in data
+            for i, _ in enumerate(s)
         ]
     )
-    y = np.array([postag_index[postag] for sentence in data for _, postag in sentence])
+    y = np.array([postag_index[p] for s in data for _, p in s])
 
     # Print feature vector sum for first and last 5 rows
     test_data = np.vstack([X[:1, :], X[-5:, :]])
