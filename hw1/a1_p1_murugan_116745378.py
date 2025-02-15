@@ -73,5 +73,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-else:
-    sys.exit(0)

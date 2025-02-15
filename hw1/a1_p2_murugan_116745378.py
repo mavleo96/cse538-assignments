@@ -15,6 +15,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+from a1_p1_murugan_116745378 import wordTokenizer
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -310,7 +311,7 @@ def main():
 
     # Train logistic regression with best hyperparameters and plot loss and accuracy
     (
-        _,
+        best_model,
         best_train_losses,
         best_train_accuracies,
         best_dev_losses,
@@ -324,7 +325,37 @@ def main():
         "results/best_training_plot.png",
     )
 
+    # Model inference on test data
     outfile.write("Checkpoint 2.4:\n")
+    sampleSentences = [
+        'The horse raced past the barn fell.',
+        'For 3 years, we attended S.B.U. in the CS program.',
+        'Did you hear Sam tell me to "chill out" yesterday? #rude'
+    ]
+    test_data = [wordTokenizer(s) for s in sampleSentences]
+    X_test = np.array(
+        [
+            getFeaturesForTarget(s, i, token_index)
+            for s in test_data
+            for i, _ in enumerate(s)
+        ]
+    )
+    X_test /= scaler
+    X_test = torch.tensor(X_test, dtype=torch.float32)
+
+    # Predict POS tags for test data
+    test_logprob_pred = best_model(X_test)
+    test_y_pred = test_logprob_pred.argmax(1).cpu().numpy()
+    inv_postag_index = {v: k for k, v in postag_index.items()}
+    test_y_pred = [inv_postag_index[i] for i in test_y_pred]
+
+    # Print predicted POS tags
+    i = 0
+    for s in test_data:
+        for t in s:
+            outfile.write(f"({t},{test_y_pred[i]}) ")
+            i += 1
+        outfile.write("\n")
 
     # Close output file
     outfile.close()
@@ -334,5 +365,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-else:
-    sys.exit(0)
