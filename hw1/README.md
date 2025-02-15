@@ -248,7 +248,7 @@ Plot the training and dev set loss and accuracy curves. The plots have epochs as
 
 ### 2.3 Hyperparameter Tuning
 
-Improve your model by tuning hyperparameters related to learning rate and regularization. Using grid search for the model over dev set, you will try to find the best learning rates, trying `[0.05,0.5,5]` as well as find the best L2 penalty, trying `[0.001,0.01,0.1]`. Find the dev set accuracy over for each configuration.
+Improve your model by tuning hyperparameters related to learning rate and regularization. Using grid search for the model over dev set, you will try to find the best learning rates, trying `[0.1, 1, 10]` as well as find the best L2 penalty, trying `[1e-5, 1e-3, 1e-1]`. Find the dev set accuracy over for each configuration.
 
 Place your code in a method named `gridSearch`, which is able to evaluate any model it takes as input:
 
@@ -270,11 +270,11 @@ Next, train the best model using the best hyperparameters from `gridSearch` to o
     - columns: l2 penalty
     - rows: learning rate as follows
 
-    | LR \ L2  | 0.001 | 0.01  | 0.1  |
-    |----------|-------|-------|------|
-    | 0.05     | x     | x     | x    |
-    | 0.5      | x     | x     | x    |
-    | 5        | x     | x     | x    |
+    | LR \ L2  | 1e-5  | 1e-3  | 1e-1  |
+    |----------|-------|-------|-------|
+    | 0.1      | x     | x     | x     |
+    | 1        | x     | x     | x     |
+    | 10       | x     | x     | x     |
     
     Print the combination that worked the best.
 
