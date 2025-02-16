@@ -56,7 +56,7 @@ def getFeaturesForTarget(
     f_array[min(ftarget_ascii, 256)] = 1
 
     # Feature 3: Length of token
-    length = np.array([len(tokens[targetI])])
+    length = np.array([min(len(tokens[targetI]), 10) / 10])
 
     # Feature 4: Previous token
     previous_token = np.zeros(vocab_size)
@@ -105,7 +105,7 @@ def trainLogReg(
     l2_penalty: float,
 ) -> Tuple[nn.Module, List, List, List, List]:
     """Train a multiclass logistic regression model"""
-    EPOCHS = 200
+    EPOCHS = 100
 
     assert (
         train_data.tensors[0].shape[1] == dev_data.tensors[0].shape[1]
@@ -266,13 +266,10 @@ def main():
     # Print feature vector sum for first and last 5 rows
     test_data = np.vstack([X[:1, :], X[-5:, :]])
     feature_vector_sum = ",".join(test_data.sum(1).astype(str))
-    outfile.write(feature_vector_sum + "\n")
+    outfile.write(feature_vector_sum + "\n\n")
 
-    # Split and scale train test data
+    # Split train test data
     X_train, X_dev, y_train, y_dev = train_test_split(X, y, test_size=0.3)
-    scaler = np.maximum(X_train.max(0, keepdims=True), 1)
-    X_train /= scaler
-    X_dev /= scaler
 
     # Create tensor objects
     Xt = torch.tensor(X_train, dtype=torch.float32)
@@ -294,6 +291,7 @@ def main():
         dev_accuracies,
         "results/training_plot.png",
     )
+    outfile.write("Accuracy plot saved to results/training_plot.png\n\n")
 
     # Hyperparameter grid search
     outfile.write("Checkpoint 2.3:\n")
@@ -324,6 +322,7 @@ def main():
         best_dev_accuracies,
         "results/best_training_plot.png",
     )
+    outfile.write("Accuracy plot saved to results/best_training_plot.png\n\n")
 
     # Model inference on test data
     outfile.write("Checkpoint 2.4:\n")
@@ -340,7 +339,6 @@ def main():
             for i, _ in enumerate(s)
         ]
     )
-    X_test /= scaler
     X_test = torch.tensor(X_test, dtype=torch.float32)
 
     # Predict POS tags for test data
@@ -353,7 +351,7 @@ def main():
     i = 0
     for s in test_data:
         for t in s:
-            outfile.write(f"({t},{test_y_pred[i]}) ")
+            outfile.write(f"{t}\t{test_y_pred[i]}\n")
             i += 1
         outfile.write("\n")
 
