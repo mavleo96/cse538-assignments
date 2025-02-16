@@ -159,7 +159,7 @@ def trainLogReg(
     num_class = train_data.tensors[1].max().item() + 1
 
     train_dataloader = DataLoader(
-        train_data, batch_size=len(train_data) // 100, shuffle=True
+        train_data, batch_size=max(1, len(train_data) // NUM_BATCHES), shuffle=True
     )
 
     # Initialize model, loss function and optimizer
@@ -185,8 +185,8 @@ def trainLogReg(
             train_logprob_pred = model(train_data.tensors[0])
             dev_logprob_pred = model(dev_data.tensors[0])
 
-            train_y_pred = train_logprob_pred.argmax(1).cpu().numpy()
-            dev_y_pred = dev_logprob_pred.argmax(1).cpu().numpy()
+            train_y_pred = train_logprob_pred.argmax(1).numpy()
+            dev_y_pred = dev_logprob_pred.argmax(1).numpy()
 
             # Calculate & save loss and accuracy
             train_losses.append(
@@ -225,6 +225,15 @@ def gridSearch(
     best_lr, best_l2_penalty = learning_rates[argmax[0]], l2_penalties[argmax[1]]
 
     return model_accuracies, best_lr, best_l2_penalty
+
+
+# ==========================
+#        Observations
+# ==========================
+# TODO: Add qualitative observation
+OBSERVATIONS = """Qualitative Observations:
+<Insert statement 1>
+<Insert statement 2>"""
 
 
 # ==========================
@@ -367,6 +376,9 @@ def main():
             outfile.write(f"{t}\t{test_y_pred[i]}\n")
             i += 1
         outfile.write("\n")
+
+    # Qualitative observation
+    outfile.write(OBSERVATIONS + "\n")
 
     # Close output file
     print("Closing output file...")
