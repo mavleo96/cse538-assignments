@@ -7,6 +7,10 @@ import re
 
 from typing import List
 
+# ==========================
+#     Word Tokenizer
+# ==========================
+
 
 def wordTokenizer(sent: str) -> List[str]:
     """Split a string into list of tokens matched by regex"""
@@ -24,9 +28,15 @@ def wordTokenizer(sent: str) -> List[str]:
     return tokens
 
 
+# ==========================
+#     Byte Pair Encoding
+# ==========================
+
+
 def spacelessBPELearn(docs, max_vocabulary=1000):
     # input: docs, a list of strings to be used as the corpus for learning the BPE vocabulary
     # output: final_vocabulary, a set of all members of the learned vocabulary
+    # non-ascii letter should be tagged as "?"
     final_vocabulary = None
     return final_vocabulary
 
@@ -37,6 +47,11 @@ def spacelessBPETokenize(text, vocab):
     # output: words, a list of strings of all word tokens, in order, from the string
     words = None
     return words
+
+
+# ==========================
+#     Main Function
+# ==========================
 
 
 def main() -> None:
@@ -52,11 +67,13 @@ def main() -> None:
         data = f.read().splitlines()
 
     # Create and open output file
+    print("Creating output file...")
     os.makedirs("results", exist_ok=True)
     outfile = open("results/a1_p1_murugan_116745378_OUTPUT.txt", "w")
 
     # Tokenize and print first 5 and last doc in input data
     outfile.write("Checkpoint 1.1:\n")
+    print("Tokenizing first 5 and last doc in input data...")
     test_data = data[:5] + (data[-1:] if len(data) > 5 else [])
     for s in test_data:
         result = wordTokenizer(s)
@@ -66,6 +83,7 @@ def main() -> None:
     outfile.write("Checkpoint 1.2:\n")
 
     # Close output file
+    print("Closing output file...")
     outfile.close()
 
     return None
