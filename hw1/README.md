@@ -200,7 +200,7 @@ Given the target index into tokens in a sentence, return a vector for that token
 3. The normalized length of the target word as an integer.<br>
 Normalize the length as: `min(token_length, 10)/10`
 4. One-hot representation of previous word (note: no feature will be 1 if target is first word)<br>
-Use `wordToIndex` to make sure the one-hot representation is consistent. `wordToIndex is` a dictionary that, given a word, returns the integer to make 1 in the one-hot representation.<br>
+Use `wordToIndex` to make sure the one-hot representation is consistent. `wordToIndex` is a dictionary that, given a word, returns the integer to make 1 in the one-hot representation.<br>
 If the word is not in `wordToIndex` then all will be zero.
 5. One-hot representation of current word
 6. One-hot representation of next word (note: no feature will be 1 if target is last word)
