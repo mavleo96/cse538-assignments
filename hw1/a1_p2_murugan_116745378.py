@@ -15,10 +15,15 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+from tabulate import tabulate
 from a1_p1_murugan_116745378 import wordTokenizer
 
 np.random.seed(0)
 torch.manual_seed(0)
+
+NUM_BATCHES = 20
+EPOCHS = 100
 
 
 # ==========================
@@ -40,26 +45,6 @@ def getConllTags(filename: str) -> List[List]:
                 wordTagsPerSent.append([])
                 sentNum += 1
     return wordTagsPerSent
-
-
-def convert_to_table(model_accuracies: List[Tuple[float, float, float]]) -> str:
-    """Convert model accuracies to a table with l2 penalty column and learning rate rows"""
-    # TODO: Need to fix this
-    table = "l2 penalty\t"
-    table += "\t".join([f"{lr:.2f}" for lr, _, _ in model_accuracies]) + "\n"
-
-    for l2, _, _ in model_accuracies:
-        table += f"{l2:.3f}\t"
-        table += "\t".join(
-            [
-                f"{acc:.3f}"
-                for _, l2_penalty, acc in model_accuracies
-                if l2_penalty == l2
-            ]
-        )
-        table += "\n"
-
-    return table
 
 
 def plot_loss_and_accuracy(
@@ -90,6 +75,7 @@ def plot_loss_and_accuracy(
 
     # Save the plot
     plt.title("Training & Dev Loss and Accuracy")
+    print(f"Saving plot to {filename}...")
     plt.savefig(filename, dpi=300, bbox_inches="tight")
 
 
@@ -112,7 +98,7 @@ def getFeaturesForTarget(
     f_array = np.zeros(257)
     f_array[min(ftarget_ascii, 256)] = 1
 
-    # Feature 3: Length of token
+    # Feature 3: Normalized length of token
     length = np.array([min(len(tokens[targetI]), 10) / 10])
 
     # Feature 4: Previous token
@@ -165,8 +151,6 @@ def trainLogReg(
     l2_penalty: float,
 ) -> Tuple[nn.Module, List, List, List, List]:
     """Train a multiclass logistic regression model"""
-    EPOCHS = 100
-
     assert (
         train_data.tensors[0].shape[1] == dev_data.tensors[0].shape[1]
     ), "train_data and dev_data shape don't match on axis=1"
@@ -189,7 +173,7 @@ def trainLogReg(
     train_accuracies, dev_accuracies = [], []
 
     # Training Loop
-    for _ in range(EPOCHS):
+    for _ in tqdm(range(EPOCHS), desc="Training Progress"):
         for batch_X, batch_y in train_dataloader:
             optimizer.zero_grad()
             loss = loss_fn(model(batch_X), batch_y)
@@ -225,17 +209,20 @@ def gridSearch(
     dev_set: TensorDataset,
     learning_rates: List[float],
     l2_penalties: List[float],
-) -> Tuple[List[Tuple[float, float, float]], float, float]:
+) -> Tuple[np.ndarray, float, float]:
     """Perform grid search to find the best hyperparameters"""
 
-    model_accuracies = []
+    model_accuracies = np.empty((len(learning_rates), len(l2_penalties)), dtype=float)
     # Iterate over all combinations of learning rates and l2 penalties
     for lr, l2 in itertools.product(learning_rates, l2_penalties):
         _, _, _, _, dev_accuracies = trainLogReg(train_set, dev_set, lr, l2)
-        model_accuracies.append((lr, l2, dev_accuracies[-1]))
+        model_accuracies[learning_rates.index(lr), l2_penalties.index(l2)] = (
+            dev_accuracies[-1]
+        )
 
     # Find the best learning rate and l2 penalty
-    best_lr, best_l2_penalty, _ = max(model_accuracies, key=lambda x: x[2])
+    argmax = np.unravel_index(model_accuracies.argmax(), model_accuracies.shape)
+    best_lr, best_l2_penalty = learning_rates[argmax[0]], l2_penalties[argmax[1]]
 
     return model_accuracies, best_lr, best_l2_penalty
 
@@ -257,6 +244,7 @@ def main():
     data = getConllTags(args.filepath)
 
     # Create and open output file
+    print("Creating output file...")
     os.makedirs("results", exist_ok=True)
     outfile = open("results/a1_p2_murugan_116745378_OUTPUT.txt", "w")
 
@@ -268,6 +256,7 @@ def main():
 
     # Create lexical feature set
     outfile.write("Checkpoint 2.1:\n")
+    print("Processing data...")
     X = np.array(
         [
             getFeaturesForTarget([t for t, _ in s], i, token_index)
@@ -278,6 +267,7 @@ def main():
     y = np.array([postag_index[p] for s in data for _, p in s])
 
     # Print feature vector sum for first and last 5 rows
+    print("Writing feature vector sum to output file...")
     test_data = np.vstack([X[:1, :], X[-5:, :]])
     feature_vector_sum = ",".join(test_data.sum(1).astype(str))
     outfile.write(feature_vector_sum + "\n\n")
@@ -286,6 +276,7 @@ def main():
     X_train, X_dev, y_train, y_dev = train_test_split(X, y, test_size=0.3)
 
     # Create tensor objects
+    print("Creating tensor objects...")
     Xt = torch.tensor(X_train, dtype=torch.float32)
     yt = torch.tensor(y_train, dtype=torch.long)
     Xd = torch.tensor(X_dev, dtype=torch.float32)
@@ -295,6 +286,7 @@ def main():
 
     # Train logistic regression with lr 0.01 and l2 penalty 0.01
     outfile.write("Checkpoint 2.2:\n")
+    print("Training logistic regression model...")
     _, train_losses, train_accuracies, dev_losses, dev_accuracies = trainLogReg(
         train_dataset, dev_dataset, 0.01, 0.01
     )
@@ -309,6 +301,7 @@ def main():
 
     # Hyperparameter grid search
     outfile.write("Checkpoint 2.3:\n")
+    print("Performing grid search...")
     learning_rates = [0.1, 1, 10]
     l2_penalties = [1e-5, 1e-3, 1e-1]
     model_accuracies, best_lr, best_l2_penalty = gridSearch(
@@ -316,12 +309,17 @@ def main():
     )
 
     # Print best hyperparameters and model accuracies
-    accuracy_table = convert_to_table(model_accuracies)
+    accuracy_table = tabulate(
+        model_accuracies.round(3),
+        headers=l2_penalties,
+        showindex=learning_rates,
+        tablefmt="pretty",
+    )
     outfile.write(accuracy_table + "\n")
-    outfile.write(f"Best learning rate: {best_lr}\n")
-    outfile.write(f"Best l2 penalty: {best_l2_penalty}\n")
+    outfile.write(f"Best hyperparameters: lr={best_lr}, l2_penalty={best_l2_penalty}\n")
 
-    # Train logistic regression with best hyperparameters and plot loss and accuracy
+    # Train logistic regression with best hyperparameters and plot loss & accuracy
+    print("Training logistic regression model with best hyperparameters...")
     (
         best_model,
         best_train_losses,
@@ -340,6 +338,7 @@ def main():
 
     # Model inference on test data
     outfile.write("Checkpoint 2.4:\n")
+    print("Predicting POS tags for test data...")
     sampleSentences = [
         "The horse raced past the barn fell.",
         "For 3 years, we attended S.B.U. in the CS program.",
@@ -370,6 +369,7 @@ def main():
         outfile.write("\n")
 
     # Close output file
+    print("Closing output file...")
     outfile.close()
 
     return None
