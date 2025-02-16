@@ -21,6 +21,9 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 
+# ==========================
+#     Utility functions
+# ==========================
 def getConllTags(filename: str) -> List[List]:
     # input: filename for a conll style parts of speech tagged file
     # output: a list of list of tuples [sent]. representing [[[word1, tag], [word2, tag2]]
@@ -39,6 +42,60 @@ def getConllTags(filename: str) -> List[List]:
     return wordTagsPerSent
 
 
+def convert_to_table(model_accuracies: List[Tuple[float, float, float]]) -> str:
+    """Convert model accuracies to a table with l2 penalty column and learning rate rows"""
+    # TODO: Need to fix this
+    table = "l2 penalty\t"
+    table += "\t".join([f"{lr:.2f}" for lr, _, _ in model_accuracies]) + "\n"
+
+    for l2, _, _ in model_accuracies:
+        table += f"{l2:.3f}\t"
+        table += "\t".join(
+            [
+                f"{acc:.3f}"
+                for _, l2_penalty, acc in model_accuracies
+                if l2_penalty == l2
+            ]
+        )
+        table += "\n"
+
+    return table
+
+
+def plot_loss_and_accuracy(
+    train_losses: List[float],
+    dev_losses: List[float],
+    train_accuracies: List[float],
+    dev_accuracies: List[float],
+    filename: str,
+) -> None:
+    """Plot loss and accuracy for training and dev data"""
+    # Create a figure with two subplots
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    # Plot loss on left y-axis
+    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
+    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
+    ax1.set_xlabel("Epochs")
+    ax1.set_ylabel("Loss")
+    ax1.legend(loc="upper left")
+    ax1.grid()
+
+    # Create a second y-axis for accuracy
+    ax2 = ax1.twinx()
+    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
+    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
+    ax2.set_ylabel("Accuracy")
+    ax2.legend(loc="upper right")
+
+    # Save the plot
+    plt.title("Training & Dev Loss and Accuracy")
+    plt.savefig(filename, dpi=300, bbox_inches="tight")
+
+
+# ==========================
+#     Feature Processing
+# ==========================
 def getFeaturesForTarget(
     tokens: List[str], targetI: int, wordToIndex: Dict[str, int]
 ) -> np.ndarray:
@@ -81,6 +138,9 @@ def getFeaturesForTarget(
     return feature_vector
 
 
+# ==========================
+#     Model Processing
+# ==========================
 class MulticlassLogisticRegression(nn.Module):
     """Multiclass Logistic Regression Model"""
 
@@ -180,55 +240,9 @@ def gridSearch(
     return model_accuracies, best_lr, best_l2_penalty
 
 
-def convert_to_table(model_accuracies: List[Tuple[float, float, float]]) -> str:
-    """Convert model accuracies to a table with l2 penalty column and learning rate rows"""
-    # TODO: Need to fix this
-    table = "l2 penalty\t"
-    table += "\t".join([f"{lr:.2f}" for lr, _, _ in model_accuracies]) + "\n"
-
-    for l2, _, _ in model_accuracies:
-        table += f"{l2:.3f}\t"
-        table += "\t".join(
-            [
-                f"{acc:.3f}"
-                for _, l2_penalty, acc in model_accuracies
-                if l2_penalty == l2
-            ]
-        )
-        table += "\n"
-
-    return table
-
-
-def plot_loss_and_accuracy(
-    train_losses: List[float],
-    dev_losses: List[float],
-    train_accuracies: List[float],
-    dev_accuracies: List[float],
-    filename: str,
-) ->  None:
-    """Plot loss and accuracy for training and dev data"""
-    # Create a figure with two subplots
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-
-    # Plot loss on left y-axis
-    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
-    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
-    ax1.set_xlabel("Epochs")
-    ax1.set_ylabel("Loss")
-    ax1.legend(loc="upper left")
-    ax1.grid()
-
-    # Create a second y-axis for accuracy
-    ax2 = ax1.twinx()
-    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
-    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
-    ax2.set_ylabel("Accuracy")
-    ax2.legend(loc="upper right")
-
-    # Save the plot
-    plt.title("Training & Dev Loss and Accuracy")
-    plt.savefig(filename, dpi=300, bbox_inches="tight")
+# ==========================
+#       Main Function
+# ==========================
 
 
 def main():
@@ -327,9 +341,9 @@ def main():
     # Model inference on test data
     outfile.write("Checkpoint 2.4:\n")
     sampleSentences = [
-        'The horse raced past the barn fell.',
-        'For 3 years, we attended S.B.U. in the CS program.',
-        'Did you hear Sam tell me to "chill out" yesterday? #rude'
+        "The horse raced past the barn fell.",
+        "For 3 years, we attended S.B.U. in the CS program.",
+        'Did you hear Sam tell me to "chill out" yesterday? #rude',
     ]
     test_data = [wordTokenizer(s) for s in sampleSentences]
     X_test = np.array(
