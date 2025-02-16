@@ -32,9 +32,9 @@ The Twitter POS annotated data was introduced in the paper [Part-of-Speech Taggi
 ### Part 2: [daily547_3pos.txt](https://drive.google.com/file/d/1u6iqtwkaEbJuMjk14QTw2X5sYDdZG9yL/view)
 - **Description:** Each line in this file contains either (1) a tab-separated token and its POS label, or (2) an empty line between the last and first tokens to denote the end of a sentence.
 - While the original version [daily547.conll](https://github.com/brendano/ark-tweet-nlp/blob/master/data/twpos-data-v0.3/daily547.conll) has 25 POS tags (defined in the linked paper), for this assignment we have aggregated them into **3 classes** as follows:  
-1. **Noun-related (N)** - originally labeled: `N, O, S, ^, Z, L, M, A`  
-2. **Verb (V)** - originally labeled: `V`  
-3. **Other (O)** - originally labeled: `R ! D P & T X Y # @ ~ U E $ ',' G`
+1. **Noun-related (N)** - originally labeled: N, O, S, ^, Z, L, M, A
+2. **Verb (V)** - originally labeled: V
+3. **Other (O)** - originally labeled: R ! D P & T X Y # @ ~ U E $ ',' G
 
 ## Requirements
 
@@ -79,8 +79,8 @@ See syllabus for code-assistance policy.
 Your objective is to develop and compare **tokenization approaches** for messy social media data.
 
 - **Filename:** `a1_p1_<lastname>_<id>.py`
-- **Input:** The file to be tokenized.<br>
-Example: `a1_p1_lastname_id.py daily547_tweets.txt`
+- **Input:** The file to be tokenized.
+    + Example: `a1_p1_lastname_id.py daily547_tweets.txt`
 - **Output:** Place checkpoint output into: `a1_p1_<lastname>_<id>_OUTPUT.txt`
 - **Mark the checkpoint clearly in your output: `print("Checkpoint X.X:")`**
 
@@ -160,13 +160,13 @@ Print the tokenization of the first 5 documents and the very last document.
 In this part, your objective is to [determine the part of speech for each token in a sentence](https://en.wikipedia.org/wiki/Part-of-speech_tagging) by developing a simple neural network from scratch. Writing code for the training and evaluation of a barebones model using the given function outlines will serve as a stepping stone towards using PyTorch in the next assignment.
 
 - **Filename:** `a1_p2_<lastname>_<id>.py`
-- **Input:** Your code should run without any additional arguments.<br>
-Example: `a1_p2_lastname_id.py daily547_3pos.conll`
+- **Input:** Your code should run without any additional arguments.
+    + Example: `a1_p2_lastname_id.py daily547_3pos.conll`
 - **Output:** Place checkpoint output into: `a1_p2_<lastname>_<id>_OUTPUT.txt`
 
 ### 2.0 Loading the Dataset
 
-Use the function `getConllTags` to load the data from daily547.conll. The function will return a list of sentences containing (token, POS tag) pairs.
+Use the function `getConllTags` to load the data from <u>daily547.conll</u>. The function will return a list of sentences containing (token, POS tag) pairs.
 
 ```python
 def getConllTags(filename):
@@ -196,11 +196,12 @@ We will use these mappings to create one-hot encodings in the next sections.
 Given the target index into tokens in a sentence, return a vector for that token having the following features:
 
 1. Whether the first letter of the target is capitalized (binary feature)
-2. The first letter of the target word (i.e. word at index `targetI`): use 257 one-hot values: 0 through 255 can be used simply as ascii values and 256 can be used for anything non-ascii (i.e. when `ord(char)` > 255).
-3. The length of the target word as an integer
+2. The first letter of the target word (i.e. word at index `targetI`): use 257 one-hot values: 0 through 255 can be used simply as ascii values and 256 can be used for anything non-ascii (i.e. when `ord(char) > 255`).
+3. The normalized length of the target word as an integer.<br>
+Normalize the length as: `min(token_length, 10)/10`
 4. One-hot representation of previous word (note: no feature will be 1 if target is first word)<br>
-Use wordToIndex to make sure the one-hot representation is consistent. wordToIndex is a dictionary that, given a word, returns the integer to make 1 in the one-hot representation.<br>
-If the word is not in wordToIndex then all will be zero.
+Use `wordToIndex` to make sure the one-hot representation is consistent. `wordToIndex is` a dictionary that, given a word, returns the integer to make 1 in the one-hot representation.<br>
+If the word is not in `wordToIndex` then all will be zero.
 5. One-hot representation of current word
 6. One-hot representation of next word (note: no feature will be 1 if target is last word)
 
@@ -227,7 +228,7 @@ Print the sum of the first and last 5 individual feature vectors of **X**.
 
 ### 2.2 Train Logistic Regression
 
-Implement multiclass logistic regression training using features from 2.1. Use a learning rate and L2 penalty 0.01 with the SGD optimizer. Train the model for 200 epochs with a suitable batch size.
+Implement multiclass logistic regression training using features from 2.1. Use a learning rate and L2 penalty 0.01 with the SGD optimizer. Train the model for 100 epochs with a suitable batch size.
 
 Place your code in a method named `trainLogReg`.
 
