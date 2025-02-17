@@ -12,13 +12,29 @@ from typing import List
 # ==========================
 
 
+REGEX_PATTERN = r"""
+https?://\S+\.\S+\w\/?|                              # URLs with http or https
+\w+\.com\b|                                          # URLs with .com
+[:;]-?[\)D\(P/]|                                     # Emoticons 1
+[DP][:;]|                                            # Emoticons 2
+(?:[A-Z]\.)+|                                        # Abbreviations
+[A-z]+[`'][A-z]+|                                    # Contractions
+\d+\.\d+|                                            # Numbers with decimal
+\d+:\d+|                                             # Time
+# [$£]?(?:\d{,3},)*\d+(?:\.\d+)?|                    # Money
+\w+[\/]\w+|                                          # Words with slashes
+(?:\.+|,+|!+|\?+|\(+|\)+|\?\!|[:;"'`~\{\}\[\]])|     # Punctuation
+[@#]?[\w\-]+|                                        # Words with optional @ or #
+\S                                                   # Any other non-whitespace character
+"""
+# TODO: A. should be captured as ["A", "."] and not ["A."]
+# TODO: Need to check if money has to be captured
+# TODO: 19 mismatch out of 150 with this regex
+
+
 def wordTokenizer(sent: str) -> List[str]:
     """Split a string into list of tokens matched by regex"""
-    # TODO: Need to check if the regex is accurate enough
-    # TODO: A. should be captured as ["A", "."] and not ["A."]
-    pattern = re.compile(
-        r"(?:[A-Z]\.)+|[A-z]+'[A-z]+|\d+\.\d+|[.,:;'`]|[@#]?[A-Za-z0-9]+|\S+"
-    )
+    pattern = re.compile(REGEX_PATTERN, re.VERBOSE)
     tokens = re.findall(pattern, sent)
 
     # Check if tokens add back to original sentence
@@ -79,6 +95,7 @@ def main() -> None:
         result = wordTokenizer(s)
         result_string = ",".join(result) + "\n"
         outfile.write(result_string)
+    outfile.write("\n")
 
     outfile.write("Checkpoint 1.2:\n")
 
