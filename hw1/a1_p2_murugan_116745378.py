@@ -55,6 +55,7 @@ def plot_loss_and_accuracy(
     filename: str,
 ) -> None:
     """Plot loss and accuracy for training and dev data"""
+    # BEGIN[Github Copilot][https://github.com/features/copilot]"Code to plot loss and accuracy for training and dev data on the same plot"
     # Create a figure with two subplots
     fig, ax1 = plt.subplots(figsize=(10, 5))
 
@@ -77,6 +78,7 @@ def plot_loss_and_accuracy(
     plt.title("Training & Dev Loss and Accuracy")
     print(f"Saving plot to {filename}...")
     plt.savefig(filename, dpi=300, bbox_inches="tight")
+    # END[Github Copilot]
 
 
 # ==========================
@@ -221,8 +223,10 @@ def gridSearch(
         )
 
     # Find the best learning rate and l2 penalty
+    # START[Github Copilot][https://github.com/features/copilot]"Find best hyperparameters"
     argmax = np.unravel_index(model_accuracies.argmax(), model_accuracies.shape)
     best_lr, best_l2_penalty = learning_rates[argmax[0]], l2_penalties[argmax[1]]
+    # END[Github Copilot]
 
     return model_accuracies, best_lr, best_l2_penalty
 
