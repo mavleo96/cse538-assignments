@@ -166,7 +166,7 @@ In this part, your objective is to [determine the part of speech for each token 
 
 ### 2.0 Loading the Dataset
 
-Use the function `getConllTags` to load the data from <u>daily547.conll</u>. The function will return a list of sentences containing (token, POS tag) pairs.
+Use the function `getConllTags` to load the data from <u>daily547_3pos.txt</u>. The function will return a list of sentences containing (token, POS tag) pairs.
 
 ```python
 def getConllTags(filename):
@@ -301,3 +301,11 @@ sampleSentences = \
 2. What is your observation about the qualitative performance of the best model?
 
 *Code should complete steps through 2.4 within 7-8 minutes (based on Colab CPU).*
+
+---
+
+## Additional References
+
+1. [Summary of the tokenizers by Hugging Face](https://huggingface.co/transformers/v4.5.1/tokenizer_summary.html)  
+2. [Byte Pair Encoding and Data Structures](https://guillaume-be.github.io/2021-09-16/byte_pair_encoding)  
+3. [Introducing a faster, more flexible byte-pair tokenizer by GitHub](https://github.blog/ai-and-ml/llms/so-many-tokens-so-little-time-introducing-a-faster-more-flexible-byte-pair-tokenizer/)  
