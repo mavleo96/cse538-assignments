@@ -6,6 +6,9 @@ import argparse
 import re
 
 from typing import List
+from collections import Counter
+from tqdm import tqdm
+
 
 # ==========================
 #     Word Tokenizer
@@ -102,14 +105,6 @@ class PrefixTree:
 # ==========================
 
 
-def spacelessBPELearn(docs, max_vocabulary=1000):
-    # input: docs, a list of strings to be used as the corpus for learning the BPE vocabulary
-    # output: final_vocabulary, a set of all members of the learned vocabulary
-    # non-ascii letter should be tagged as "?"
-    final_vocabulary = [chr(i) for i in range(256)]
-    return final_vocabulary
-
-
 def spacelessBPETokenize(text, vocab):
     """Tokenize a string using a given vocabulary"""
     prefix_tree = PrefixTree()
@@ -134,6 +129,49 @@ def spacelessBPETokenize(text, vocab):
     return tokens
 
 
+def spacelessBPELearn(docs, max_vocabulary=1000):
+    """Learn a vocabulary from a list of documents"""
+    global outfile
+    # Initialize vocabulary with all ascii characters
+    vocab = [chr(i) for i in range(256)]
+
+    # Initialize word count with all words in docs
+    # Split words by spaces and skip words with length <= 1
+    word_count = Counter([i for d in docs for i in d.split() if len(i) > 1])
+
+    # Loop until vocabulary size is reached
+    for iter in tqdm(range(max_vocabulary - 256)):
+        pairs = Counter()
+        purge = []
+        # Loop through each word and find all pairs
+        # TODO: Optimize by using a prefix tree
+        for word, freq in word_count.items():
+            symbols = spacelessBPETokenize(word, vocab)
+            # If word is already a single symbol, remove it from word count
+            if len(symbols) <= 1:
+                purge.append(word)
+                continue
+            for i in range(len(symbols) - 1):
+                # Skip pairs with "?"
+                if symbols[i] == "?" or symbols[i + 1] == "?":
+                    continue
+                pairs[symbols[i], symbols[i + 1]] += freq
+
+        # Remove words with length <= 1 from word count
+        for word in purge:
+            del word_count[word]
+
+        # Find most common pair and add it to vocabulary
+        mc_pair = pairs.most_common(1)[0][0]
+
+        # Update word count with new pair
+        if iter in [0, 1, 10, 100, 500]:
+            outfile.write(f"iter {iter}: {pairs.most_common(5)}\n")
+        vocab.append("".join(mc_pair))
+
+    return vocab
+
+
 # ==========================
 #     Main Function
 # ==========================
@@ -156,6 +194,7 @@ def main() -> None:
     # Create and open output file
     print("Creating output file...")
     os.makedirs("results", exist_ok=True)
+    global outfile
     outfile = open("results/a1_p1_murugan_116745378_OUTPUT.txt", "w")
 
     # Tokenize using regex tokenizer
