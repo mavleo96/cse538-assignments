@@ -5,6 +5,7 @@ import argparse
 import re
 
 from typing import List
+from itertools import pairwise
 from collections import Counter
 from tqdm import tqdm
 
@@ -130,7 +131,6 @@ def spacelessBPETokenize(text, vocab):
 
 def spacelessBPELearn(docs, max_vocabulary=1000):
     """Learn a vocabulary from a list of documents"""
-    global outfile
     # Initialize vocabulary with all ascii characters
     N_ASCII = 256
     vocab = [chr(i) for i in range(N_ASCII)]
@@ -151,11 +151,11 @@ def spacelessBPELearn(docs, max_vocabulary=1000):
             if len(tokens) <= 1:
                 purge.add(word)
                 continue
-            for i in range(len(tokens) - 1):
+            for pair in pairwise(tokens):
                 # Skip pairs with "?"
-                if tokens[i] == "?" or tokens[i + 1] == "?":
+                if "?" in pair:
                     continue
-                pairs[tokens[i], tokens[i + 1]] += freq
+                pairs[pair] += freq
 
         # Remove words with length <= 1 from word count
         for word in purge:
@@ -163,21 +163,26 @@ def spacelessBPELearn(docs, max_vocabulary=1000):
             del tokenized_words[word]
 
         # Find most common pair and add it to vocabulary
-        mc_pair = pairs.most_common(1)[0][0]
-        vocab.append("".join(mc_pair))
+        new_token = "".join(pairs.most_common(1)[0][0])
+        vocab.append(new_token)
 
         # Update word count and tokenized words
-        contains_pair = lambda tokens, pair: any(
-            tokens[i] == pair[0] and tokens[i + 1] == pair[1]
-            for i in range(len(tokens) - 1)
-        )
+        contains_new_token = lambda t, n: any(i + j == n for i, j in pairwise(t))
         for word in word_count:
-            if contains_pair(tokenized_words[word], mc_pair):
+            if contains_new_token(tokenized_words[word], new_token):
                 tokenized_words[word] = spacelessBPETokenize(word, vocab)
 
         # Write top 5 pairs to output file
         if iter in [0, 1, 10, 100, 500]:
             outfile.write(f"iter {iter}: {pairs.most_common(5)}\n")
+
+    # Check if vocabulary size is correct
+    assert (
+        len(vocab) == max_vocabulary
+    ), f"Vocabulary size is {len(vocab)}, expected {max_vocabulary}"
+    assert len(set(vocab)) == len(
+        vocab
+    ), f"Vocabulary has duplicates: {[i for i in vocab if vocab.count(i) > 1]}"
 
     return vocab
 
