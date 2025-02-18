@@ -364,10 +364,10 @@ def main():
     # Print predicted POS tags
     i = 0
     for s in test_data:
-        for t in s:
-            outfile.write(f"{t}\t{test_y_pred[i]}\n")
-            i += 1
-        outfile.write("\n")
+        predicted_tags = [(t, test_y_pred[i + j]) for j, t in enumerate(s)]
+        i += len(s)
+        outfile.write(f"{predicted_tags}\n")
+    outfile.write("\n")
 
     # Qualitative observation
     outfile.write(OBSERVATIONS + "\n")
