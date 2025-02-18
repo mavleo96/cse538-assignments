@@ -270,8 +270,8 @@ def main():
     # Print feature vector sum for first and last 5 rows
     print("Writing feature vector sum to output file...")
     test_data = np.vstack([X[:1, :], X[-5:, :]])
-    feature_vector_sum = ",".join(test_data.sum(1).astype(str))
-    outfile.write(feature_vector_sum + "\n\n")
+    feature_vector_sum = test_data.sum(1)
+    outfile.write(f"{feature_vector_sum.tolist()}\n\n")
 
     # Split train test data
     X_train, X_dev, y_train, y_dev = train_test_split(X, y, test_size=0.3)

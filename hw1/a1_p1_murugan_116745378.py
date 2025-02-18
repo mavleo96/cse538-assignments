@@ -214,8 +214,7 @@ def main() -> None:
     outfile.write("Tokenized data:\n")
     for s in test_data:
         result = wordTokenizer(s)
-        result_string = ",".join(result) + "\n"
-        outfile.write(result_string)
+        outfile.write(f"{result}\n")
     outfile.write("\n")
 
     # Tokenize using SLBPE tokenizer
@@ -229,15 +228,14 @@ def main() -> None:
 
     print("Writing final vocabulary to output file...")
     outfile.write("Final vocabulary:\n")
-    outfile.write(",".join(final_vocabulary) + "\n\n")
+    outfile.write(f"{final_vocabulary}\n\n")
 
     # Tokenize and print first 5 and last doc in input data
     print("Tokenizing first 5 and last doc in input data using SLBPE...")
     outfile.write("Tokenized data:\n")
     for s in test_data:
         result = spacelessBPETokenize(s, final_vocabulary)
-        result_string = ",".join(result) + "\n"
-        outfile.write(result_string)
+        outfile.write(f"{result}\n")
 
     # Close output file
     print("Closing output file...")
