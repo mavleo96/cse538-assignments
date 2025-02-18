@@ -127,7 +127,7 @@ Otherwise, byte pair encoding will proceed as described in the book and slides: 
 
 Run until the vocabulary size reaches 1000.
 
-Place code that learns the vocabulary in a method named `spacelessBPElearn`, and place code that runs the tokenizer in a method named `wordTokenize`.
+Place code that learns the vocabulary in a method named `spacelessBPElearn`, and place code that runs the tokenizer in a method named `spacelessBPETokenize`.
 
 ```python
 def spacelessBPELearn(docs, max_vocabulary=1000):
@@ -228,7 +228,7 @@ Print the sum of the first and last 5 individual feature vectors of **X**.
 
 ### 2.2 Train Logistic Regression
 
-Implement multiclass logistic regression training using features from 2.1. Use a learning rate and L2 penalty 0.01 with the SGD optimizer. Train the model for 100 epochs with a suitable batch size.
+Implement multiclass logistic regression training using features from 2.1. Use a learning rate and L2 penalty 0.01 with the SGD optimizer and train the model for 100 epochs. You need to use the full training set and not mini batches during forward pass.
 
 Place your code in a method named `trainLogReg`.
 

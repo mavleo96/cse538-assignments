@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import argparse
 import torch
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
 
 from typing import List, Dict, Tuple
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.utils import shuffle
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import TensorDataset
 from tqdm import tqdm
 from tabulate import tabulate
 from a1_p1_murugan_116745378 import wordTokenizer
@@ -22,7 +19,6 @@ from a1_p1_murugan_116745378 import wordTokenizer
 np.random.seed(0)
 torch.manual_seed(0)
 
-NUM_BATCHES = 20
 EPOCHS = 100
 
 
@@ -153,16 +149,15 @@ def trainLogReg(
     l2_penalty: float,
 ) -> Tuple[nn.Module, List, List, List, List]:
     """Train a multiclass logistic regression model"""
+    Xt, yt = train_data.tensors
+    Xd, yd = dev_data.tensors
+
     assert (
-        train_data.tensors[0].shape[1] == dev_data.tensors[0].shape[1]
+        Xt.shape[1] == Xd.shape[1]
     ), "train_data and dev_data shape don't match on axis=1"
 
-    feature_count = train_data.tensors[0].shape[1]
-    num_class = train_data.tensors[1].max().item() + 1
-
-    train_dataloader = DataLoader(
-        train_data, batch_size=max(1, len(train_data) // NUM_BATCHES), shuffle=True
-    )
+    feature_count = Xt.shape[1]
+    num_class = yt.max().item() + 1
 
     # Initialize model, loss function and optimizer
     model = MulticlassLogisticRegression(feature_count, num_class)
@@ -176,32 +171,25 @@ def trainLogReg(
 
     # Training Loop
     for _ in tqdm(range(EPOCHS), desc="Training Progress"):
-        for batch_X, batch_y in train_dataloader:
-            optimizer.zero_grad()
-            loss = loss_fn(model(batch_X), batch_y)
-            loss.backward()
-            optimizer.step()
+        optimizer.zero_grad()
+        loss = loss_fn(model(Xt), yt)
+        loss.backward()
+        optimizer.step()
 
         with torch.no_grad():
             # Evaluate on train and dev data
-            train_logprob_pred = model(train_data.tensors[0])
-            dev_logprob_pred = model(dev_data.tensors[0])
+            train_logprob_pred = model(Xt)
+            dev_logprob_pred = model(Xd)
 
             train_y_pred = train_logprob_pred.argmax(1).numpy()
             dev_y_pred = dev_logprob_pred.argmax(1).numpy()
 
             # Calculate & save loss and accuracy
-            train_losses.append(
-                loss_fn(train_logprob_pred, train_data.tensors[1]).item()
-            )
-            dev_losses.append(loss_fn(dev_logprob_pred, dev_data.tensors[1]).item())
+            train_losses.append(loss_fn(train_logprob_pred, yt).item())
+            dev_losses.append(loss_fn(dev_logprob_pred, yd).item())
 
-            train_accuracies.append(
-                accuracy_score(train_data.tensors[1].cpu().numpy(), train_y_pred)
-            )
-            dev_accuracies.append(
-                accuracy_score(dev_data.tensors[1].cpu().numpy(), dev_y_pred)
-            )
+            train_accuracies.append(accuracy_score(yt.cpu().numpy(), train_y_pred))
+            dev_accuracies.append(accuracy_score(yd.cpu().numpy(), dev_y_pred))
 
     return model, train_losses, train_accuracies, dev_losses, dev_accuracies
 
