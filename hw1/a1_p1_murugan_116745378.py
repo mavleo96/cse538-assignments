@@ -16,18 +16,18 @@ from tqdm import tqdm
 
 
 REGEX_PATTERN = r"""
-https?://\S+\.\S+\w\/?|                              # URLs with http or https
+https?://\S+\.\S+\w/?|                               # URLs with http or https
 \w+\.com\b|                                          # URLs with .com
-[:;]-?[\)D\(P/]|                                     # Emoticons 1
-[DP][:;]|                                            # Emoticons 2
+[:;]-?[\)D\(P/]| [DP][:;]|                           # Emoticons
 (?:[A-Z]\.)+|                                        # Abbreviations
-[A-z]+[`'][A-z]+|                                    # Contractions
+[A-Za-z]+[`'][A-Za-z]+|                              # Contractions
 \d+\.\d+|                                            # Numbers with decimal
 \d+:\d+|                                             # Time
-# [$£]?(?:\d{,3},)*\d+(?:\.\d+)?|                    # Money
-\w+[\/]\w+|                                          # Words with slashes
+# [$£]?(?:\d{1,3},)*\d+(?:\.\d+)?[kKmM]?|              # Money
+\w+/\w+|                                             # Words with slashes
 (?:\.+|,+|!+|\?+|\(+|\)+|\?\!|[:;"'`~\{\}\[\]])|     # Punctuation
 [@#]?[\w\-]+|                                        # Words with optional @ or #
+# [@#]?(?:\w[\w-]+)*\w+|                               # Words with optional @ or #
 \S                                                   # Any other non-whitespace character
 """
 # TODO: A. should be captured as ["A", "."] and not ["A."]
