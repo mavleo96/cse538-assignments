@@ -166,11 +166,13 @@ def spacelessBPELearn(docs, max_vocabulary=1000):
         new_token = "".join(pairs.most_common(1)[0][0])
         vocab.append(new_token)
 
+        # BEGIN[ChatGPT][https://chatgpt.com/]"How to optimize naive BPE implementation? + Python code"
         # Update word count and tokenized words
         contains_new_token = lambda t, n: any(i + j == n for i, j in pairwise(t))
         for word in word_count:
             if contains_new_token(tokenized_words[word], new_token):
                 tokenized_words[word] = spacelessBPETokenize(word, vocab)
+        # END[ChatGPT]
 
         # Write top 5 pairs to output file
         if iter in [0, 1, 10, 100, 500]:
