@@ -132,8 +132,8 @@ def spacelessBPETokenize(text, vocab):
 def spacelessBPELearn(docs, max_vocabulary=1000):
     """Learn a vocabulary from a list of documents"""
     # Initialize vocabulary with all ascii characters
-    N_ASCII = 256
-    vocab = [chr(i) for i in range(N_ASCII)]
+    N_ASCII = 127 - 33
+    vocab = [chr(i) for i in range(33, 127)]
 
     # Initialize word count with all words in docs
     word_count = Counter(i for d in docs for i in d.split() if len(i) > 1)
