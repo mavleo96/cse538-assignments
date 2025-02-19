@@ -3,11 +3,11 @@
 import os
 import argparse
 import torch
-import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 
 from typing import List, Dict, Tuple
+from itertools import product
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from torch import nn
@@ -204,7 +204,7 @@ def gridSearch(
 
     model_accuracies = np.empty((len(learning_rates), len(l2_penalties)), dtype=float)
     # Iterate over all combinations of learning rates and l2 penalties
-    for lr, l2 in itertools.product(learning_rates, l2_penalties):
+    for lr, l2 in product(learning_rates, l2_penalties):
         _, _, _, _, dev_accuracies = trainLogReg(train_set, dev_set, lr, l2)
         model_accuracies[learning_rates.index(lr), l2_penalties.index(l2)] = (
             dev_accuracies[-1]
@@ -222,11 +222,11 @@ def gridSearch(
 # ==========================
 #        Observations
 # ==========================
-# TODO: Add qualitative observation
 OBSERVATIONS = """Qualitative Observations:
-<Insert statement 1>
-<Insert statement 2>"""
-
+1. Performance on the test data is below average, likely because 50% of the tokens are out-of-bag vocabulary.
+2. The model has learned that the token "the" (not "The") is generally followed by a noun, as it correctly predicted the tags for "barn" and "CS" but not for "horse".
+3. It has also learned that tokens with capital letters are generally nouns, as it correctly predicted the tags for "S.B.U.", "CS", and "Sam", despite them being out-of-bag vocabulary.
+"""
 
 # ==========================
 #       Main Function
@@ -239,6 +239,7 @@ def main():
         description="script to run cse538 assignment 1 part 2"
     )
     parser.add_argument("filepath", type=str, help="path to the input file")
+    parser.add_argument("--save_model", action="store_true", help="save the model")
     args = parser.parse_args()
 
     # Read and process input data
@@ -252,8 +253,8 @@ def main():
     # Create mapping dictionaries
     unique_tokens = {t for s in data for t, _ in s}
     unique_postags = {p for s in data for _, p in s}
-    token_index = {t: i for i, t in enumerate(unique_tokens)}
-    postag_index = {p: i for i, p in enumerate(unique_postags)}
+    token_index = {t: i for i, t in enumerate(sorted(list(unique_tokens)))}
+    postag_index = {p: i for i, p in enumerate(sorted(list(unique_postags)))}
 
     # Create lexical feature set
     outfile.write("Checkpoint 2.1:\n")
@@ -336,6 +337,11 @@ def main():
         "results/best_training_plot.png",
     )
     outfile.write("Accuracy plot saved to results/best_training_plot.png\n\n")
+
+    # Save model
+    if args.save_model:
+        print("Saving model to results/best_model.pt...")
+        torch.save(best_model.state_dict(), "results/best_model.pt")
 
     # Model inference on test data
     outfile.write("Checkpoint 2.4:\n")
