@@ -181,8 +181,8 @@ def trainLogReg(
             train_logprob_pred = model(Xt)
             dev_logprob_pred = model(Xd)
 
-            train_y_pred = train_logprob_pred.argmax(1).numpy()
-            dev_y_pred = dev_logprob_pred.argmax(1).numpy()
+            train_y_pred = train_logprob_pred.argmax(1).cpu().numpy()
+            dev_y_pred = dev_logprob_pred.argmax(1).cpu().numpy()
 
             # Calculate & save loss and accuracy
             train_losses.append(loss_fn(train_logprob_pred, yt).item())
@@ -203,12 +203,10 @@ def gridSearch(
     """Perform grid search to find the best hyperparameters"""
 
     model_accuracies = np.empty((len(learning_rates), len(l2_penalties)), dtype=float)
-    # Iterate over all combinations of learning rates and l2 penalties
-    for lr, l2 in product(learning_rates, l2_penalties):
-        _, _, _, _, dev_accuracies = trainLogReg(train_set, dev_set, lr, l2)
-        model_accuracies[learning_rates.index(lr), l2_penalties.index(l2)] = (
-            dev_accuracies[-1]
-        )
+    for i, lr in enumerate(learning_rates):
+        for j, l2 in enumerate(l2_penalties):
+            _, _, _, _, dev_accuracies = trainLogReg(train_set, dev_set, lr, l2)
+            model_accuracies[i, j] = dev_accuracies[-1]
 
     # Find the best learning rate and l2 penalty
     # START[Github Copilot][https://github.com/features/copilot]"Find best hyperparameters"
