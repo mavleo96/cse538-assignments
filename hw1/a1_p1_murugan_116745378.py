@@ -23,16 +23,13 @@ https?://\S+\.\S+\w/?|                               # URLs with http or https
 [A-Za-z]+[`'][A-Za-z]+|                              # Contractions
 \d+\.\d+|                                            # Numbers with decimal
 \d+:\d+|                                             # Time
-# [$£]?(?:\d{1,3},)*\d+(?:\.\d+)?[kKmM]?|              # Money
 \w+/\w+|                                             # Words with slashes
 (?:\.+|,+|!+|\?+|\(+|\)+|\?\!|[:;"'`~\{\}\[\]])|     # Punctuation
-[@#]?[\w\-]+|                                        # Words with optional @ or #
-# [@#]?(?:\w[\w-]+)*\w+|                               # Words with optional @ or #
+[@#][\w\-]+|                                         # Words with optional @ or #
+[A-Za-z0-9]+|                                        # Words
 \S                                                   # Any other non-whitespace character
 """
-# TODO: A. should be captured as ["A", "."] and not ["A."]
-# TODO: Need to check if money has to be captured
-# TODO: 19 mismatch out of 150 with this regex
+# TODO: 34 mismatch out of 150 with this regex
 
 
 def wordTokenizer(sent: str) -> List[str]:
