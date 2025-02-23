@@ -111,10 +111,13 @@ def spacelessBPETokenize(text, vocab):
     for v in vocab:
         prefix_tree.insert(v)
 
-    tokens = []
+    # Replace non-ascii characters with "?" in word string
+    text = "".join([i if 32 <= ord(i) < 127 else "?" for i in text])
     # Split text into words to skip spaces
     text = text.split()
+
     # Loop through each word and find longest prefix
+    tokens = []
     for word in text:
         while word:
             prefix = prefix_tree.longest_prefix(word)
@@ -152,9 +155,6 @@ def spacelessBPELearn(docs, max_vocabulary=1000):
                 purge.add(word)
                 continue
             for pair in pairwise(tokens):
-                # Skip pairs with "?"
-                if "?" in pair:
-                    continue
                 pairs[pair] += freq
 
         # Remove words with length <= 1 from word count
