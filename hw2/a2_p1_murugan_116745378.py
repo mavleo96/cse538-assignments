@@ -4,8 +4,116 @@ import os
 import argparse
 import csv
 
-from transformers import GPT2TokenizerFast
-from typing import List
+import numpy as np
+from tqdm import tqdm
+from transformers import GPT2TokenizerFast, PreTrainedTokenizerFast
+from typing import List, Union
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# ==========================
+#       TrigramLM Class
+# ==========================
+
+
+class TrigramLM:
+    """Trigram Language Model"""
+
+    def __init__(self, tokenizer: PreTrainedTokenizerFast):
+        """Initialize the TrigramLM"""
+        self.tokenizer = tokenizer
+        self.vocab_size = tokenizer.vocab_size + 2  # for <s> and </s>
+        assert self.vocab_size > 2
+        # TODO: check if this is correct and if we need to add <|endoftext|> to the vocab
+        self.unigram_counts = {}
+        self.bigram_counts = {}
+        self.trigram_counts = {}
+        # TODO: check if defaultdict is safe here
+
+    def train(self, data: List[List[str]]) -> None:
+        """Train the TrigramLM"""
+        # Tokenize the data
+        tokenized_data = [self._tokenize(i) for i in data]
+
+        # Loop through the tokenized data
+        for row in tqdm(tokenized_data, desc="Training TrigramLM"):
+            assert len(row) > 0
+            # Add <s> and </s> tokens to the row
+            row = ["<s>"] + row + ["</s>"]
+
+            # Loop through the tokens in the row
+            for j, _ in enumerate(row):
+                # Count unigrams
+                self.unigram_counts[row[j]] = self.unigram_counts.get(row[j], 0) + 1
+
+                # Count bigrams
+                if j > 0:
+                    if row[j - 1] not in self.bigram_counts:
+                        self.bigram_counts[row[j - 1]] = {}
+                    self.bigram_counts[row[j - 1]][row[j]] = (
+                        self.bigram_counts[row[j - 1]].get(row[j], 0) + 1
+                    )
+
+                # Count trigrams
+                if j > 1:
+                    if row[j - 2] not in self.trigram_counts:
+                        self.trigram_counts[row[j - 2]] = {}
+                    if row[j - 1] not in self.trigram_counts[row[j - 2]]:
+                        self.trigram_counts[row[j - 2]][row[j - 1]] = {}
+                    self.trigram_counts[row[j - 2]][row[j - 1]][row[j]] = (
+                        self.trigram_counts[row[j - 2]][row[j - 1]].get(row[j], 0) + 1
+                    )
+                # TODO: check if defaultdict is safe here
+        return None
+
+    def nextProb(self, history_toks: List[str], next_toks: List[str]) -> float:
+        """Compute the probability of the next token given the history"""
+        assert hasattr(history_toks, "__len__")
+        assert hasattr(next_toks, "__len__")
+        assert len(next_toks) > 0
+
+        # Case 1: No history
+        if len(history_toks) == 0:
+            # Compute unigram probabilities
+            n_counts = [self.unigram_counts.get(tok, 0) for tok in next_toks]
+            d_counts = self.bigram_count
+
+        # Case 2: One history token
+        elif len(history_toks) == 1:
+            # Compute bigram probabilities
+            prev_tok = history_toks[0]
+            n_counts = [
+                self.bigram_counts.get(prev_tok, {}).get(tok, 0) for tok in next_toks
+            ]
+            d_counts = self.unigram_counts.get(prev_tok, 0)
+
+        # Case 3: Two or more history tokens
+        else:
+            # Compute trigram probabilities
+            prev_tok1, prev_tok2 = history_toks[-2:]
+            n_counts = [
+                self.trigram_counts.get(prev_tok1, {}).get(prev_tok2, {}).get(tok, 0)
+                for tok in next_toks
+            ]
+            d_counts = self.bigram_counts.get(prev_tok1, {}).get(prev_tok2, 0)
+
+        # Return the add-one smoothed probabilities
+        return self._add_one_smoothed_prob(n_counts, d_counts)
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Internal method to tokenize text"""
+        return self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(text))
+
+    def _add_one_smoothed_prob(
+        self, n_counts: Union[int, List[int]], d_counts: int
+    ) -> Union[float, List[float]]:
+        """Internal method to compute add-one smoothed probabilities"""
+        assert d_counts > 0
+
+        if isinstance(n_counts, int):
+            return (n_counts + 1) / (d_counts + self.vocab_size)
+        else:
+            return [(n + 1) / (d_counts + self.vocab_size) for n in n_counts]
 
 
 # ==========================
