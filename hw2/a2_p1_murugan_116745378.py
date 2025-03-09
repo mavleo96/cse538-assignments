@@ -21,10 +21,13 @@ class TrigramLM:
 
     def __init__(self, tokenizer: PreTrainedTokenizerFast):
         """Initialize the TrigramLM"""
+        assert issubclass(
+            type(tokenizer), PreTrainedTokenizerFast
+        ), "tokenizer must be a PreTrainedTokenizerFast"
         self.tokenizer = tokenizer
-        self.vocab_size = tokenizer.vocab_size + 2  # for <s> and </s>
-        assert self.vocab_size > 2
-        # TODO: check if this is correct and if we need to add <|endoftext|> to the vocab
+        self.vocab_size = len(tokenizer.vocab)
+        assert self.vocab_size > 0, "vocab_size must be greater than 0"
+
         self.unigram_counts = {}
         self.bigram_counts = {}
         self.trigram_counts = {}
@@ -149,6 +152,7 @@ OBSERVATIONS = """Observations:
 The first 2 test cases are choruses where the third test case is a verse.
 The perplexity is lower for the choruses, which makes sense because the model is trained on more data for the choruses.
 """
+# TODO: phrase this better
 
 
 # ==========================
@@ -183,6 +187,7 @@ def main() -> None:
     tokenizer.bos_token = "<s>"
     tokenizer.eos_token = "</s>"
     tokenizer.pad_token = "<|endoftext|>"
+    tokenizer.add_tokens(["<s>", "</s>"])  # Add <s> and </s> tokens to the tokenizer
 
     print("Tokenizing first and last row in input data using GPT2 tokenizer...")
     first_row = tokenizer.tokenize(data[0][2])
@@ -227,7 +232,7 @@ def main() -> None:
     outfile.write("\n")
 
     # Observations
-    outfile.write(OBSERVATIONS + "\n")
+    outfile.write(OBSERVATIONS)
 
     # Close output file
     print("Closing output file...")
