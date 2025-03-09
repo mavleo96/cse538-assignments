@@ -14,17 +14,17 @@
     - 1.2 Smoothed Trigram Language Model (30 points)
     - 1.3 Perplexity of TrigramLM (10 points)
 - **Part II. RNN LM (50 Points)**
-    - 2.1. Preparing the dataset (10 points)
-    - 2.2. Recurrent NN-based Language Model (10 points)
-    - 2.3. Train RecurrentLM (20 points)
-    - 2.4. Autoregressive Lyric Generation (10 points)
-    - Extra Credit (10 pts)
+    - 2.1 Preparing the Dataset (10 points)
+    - 2.2 Recurrent NN-based Language Model (10 points)
+    - 2.3 Train RecurrentLM (20 points)
+    - 2.4 Autoregressive Lyric Generation (10 points)
+    - Extra Credit (10 points)
 
 #### Objectives:
 - Work with a pre-trained BPE tokenizer
 - Implement two different language modeling approaches
-- Evaluate the LMs
-- Use an LM to generate content
+- Evaluate the language models
+- Use a language model to generate content
 
 ---
 
@@ -93,7 +93,7 @@ All components of this assignment will use a pre-trained BPE tokenizer with docu
 - Add a pad token with value `<|endoftext|>`.
 - Change the BOS and EOS in the tokenizer’s special token map to `<s>` and `</s>` respectively.
 
-**Side Note:** GPT2 does not use start and stop tokens, and you must add them yourself. We are using GPT2 tokenizer here so you can compare probabilistic LM to the output of RNN-based LM in part 2. However, if you were to want to use a tokenizer that has sentence start and stop tokens, like roberts-base, then you would get them with:
+**Side Note:** GPT2 does not use start and stop tokens, and you must add them yourself. We are using GPT2 tokenizer here so you can compare probabilistic LM to the output of RNN-based LM in part 2. However, if you were to want to use a tokenizer that has sentence start and stop tokens, like roberta-base, then you would get them with:
 ```python
 tokenizer = PreTrainedTokenizerFast.from_pretrained('roberta-base')
 
@@ -143,6 +143,7 @@ Perplexity is a metric to measure how "surprised" a language model is when it se
 def get_perplexity(probs):
     # input: probs: a list containing probabilities of the target token for each index of input
     # output: perplexity: a single float number
+
     # <FILL IN>
     return perplexity
 ```
@@ -172,7 +173,7 @@ In this part, your objective is to implement the language modeling task using a 
 
 ### 2.1 Preparing the dataset
 
-Now fill in the chunk_tokens function below. The function should split a larger token sequence into multiple, smaller sequences of size `chunk_len - 2`. Append the BOS token id as the first and EOS as the last index of the chunk. Sometimes the last chunk may not have the required number of tokens, so fill in the gap using the pad token.
+Now fill in the `chunk_tokens` function below. The function should split a larger token sequence into multiple, smaller sequences of size `chunk_len - 2`. Append the BOS token id as the first and EOS as the last index of the chunk. Sometimes the last chunk may not have the required number of tokens, so fill in the gap using the pad token.
 
 Same sequence length enables batch processing, which saves time during model training.
 
