@@ -100,6 +100,16 @@ class TrigramLM:
         # Return the add-one smoothed probabilities
         return self._add_one_smoothed_prob(n_counts, d_counts)
 
+    def get_sequence_probability(self, sequence: List[str]) -> List[float]:
+        """Get the probability of the sequence"""
+        probs = []
+        for i in range(len(sequence)):
+            history_toks = sequence[:i]
+            next_toks = sequence[i : i + 1]
+            probs.extend(self.nextProb(history_toks, next_toks))
+
+        return probs
+
     def _tokenize(self, text: str) -> List[str]:
         """Internal method to tokenize text"""
         return self.tokenizer.tokenize(text)
@@ -112,6 +122,33 @@ class TrigramLM:
             return (n_counts + 1) / (d_counts + self.vocab_size)
         else:
             return [(n + 1) / (d_counts + self.vocab_size) for n in n_counts]
+
+
+# ==========================
+#        Perplexity
+# ==========================
+
+
+def get_perplexity(probs: List[float]) -> float:
+    """Get the perplexity of the probabilities"""
+    assert isinstance(probs, list), "probs must be a list"
+    assert len(probs) > 0, "probs must not be empty"
+
+    log_probs = np.log(probs)
+    log_perplexity = (-1 / len(log_probs)) * np.sum(log_probs)
+    perplexity = np.exp(log_perplexity)
+
+    return perplexity
+
+
+# ==========================
+#        Observations
+# ==========================
+
+OBSERVATIONS = """Observations:
+The first 2 test cases are choruses where the third test case is a verse.
+The perplexity is lower for the choruses, which makes sense because the model is trained on more data for the choruses.
+"""
 
 
 # ==========================
@@ -172,6 +209,25 @@ def main() -> None:
         prob = {next_toks[i]: f"{prob[i]:.2e}" for i in range(len(next_toks))}
         outfile.write(f"{prob}\n")
     outfile.write("\n")
+
+    # Compute perplexity
+    outfile.write("Checkpoint 1.3:\n")
+
+    print("Computing perplexity...")
+    test_cases = [
+        ["Are", "Ġwe", "Ġout", "Ġof", "Ġthe", "Ġwoods", "Ġyet", "?"],
+        ["Are", "Ġwe", "Ġin", "Ġthe", "Ġclear", "Ġyet", "?"],
+        ["August", "Ġslipped", "Ġaway", "Ġinto", "Ġa", "Ġmoment", "Ġin", "Ġtime"],
+    ]
+    # TODO: check if BOS and EOS need to be included in the history
+    for test_case in test_cases:
+        probs = lmodel.get_sequence_probability(test_case)
+        perplexity = get_perplexity(probs)
+        outfile.write(f"{test_case}: {perplexity:.2f}\n")
+    outfile.write("\n")
+
+    # Observations
+    outfile.write(OBSERVATIONS + "\n")
 
     # Close output file
     print("Closing output file...")
