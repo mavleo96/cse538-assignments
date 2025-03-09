@@ -99,6 +99,34 @@ def main() -> None:
     outfile = open("results/a2_p2_murugan_116745378_OUTPUT.txt", "w")
     # TODO: check if pdf output can be directly created instead
 
+    # Preparing the dataset
+    outfile.write("Checkpoint 2.1:\n")
+
+    # Initialize GPT2 tokenizer
+    print("Initializing GPT2 tokenizer...")
+    tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+    tokenizer.bos_token = "<s>"
+    tokenizer.eos_token = "</s>"
+    tokenizer.pad_token = "<|endoftext|>"
+    tokenizer.add_tokens(["<s>", "</s>"])  # Add <s> and </s> tokens to the tokenizer
+
+    # Process the data
+    processed_data = process_data(data, tokenizer)
+    X = processed_data[:, :-1]
+    y = processed_data[:, 1:]
+    dataset = TensorDataset(X, y)
+    dataloader = DataLoader(dataset, batch_size=32, drop_last=True)
+
+    # Output chunked tensor for "Enchanted (Taylor's Version)"
+    test_data = [
+        row
+        for row in data
+        if row[0] == "Enchanted (Taylor's Version)"
+        and row[1] == "Speak Now (Taylor's Version)"
+    ]
+    test_data = process_data(test_data, tokenizer)
+    outfile.write(f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{test_data}\n')
+
     # Close output file
     print("Closing output file...")
     outfile.close()
