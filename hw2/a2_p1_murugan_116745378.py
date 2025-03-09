@@ -37,7 +37,7 @@ class TrigramLM:
 
         # Loop through the tokenized data
         for row in tqdm(tokenized_data, desc="Training TrigramLM"):
-            assert len(row) > 0
+            assert len(row) > 0, "row must not be empty"
             # Add <s> and </s> tokens to the row
             row = ["<s>"] + row + ["</s>"]
 
@@ -102,7 +102,7 @@ class TrigramLM:
 
     def _tokenize(self, text: str) -> List[str]:
         """Internal method to tokenize text"""
-        return self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(text))
+        return self.tokenizer.tokenize(text)
 
     def _add_one_smoothed_prob(
         self, n_counts: Union[int, List[int]], d_counts: int
@@ -148,8 +148,8 @@ def main() -> None:
     tokenizer.pad_token = "<|endoftext|>"
 
     print("Tokenizing first and last row in input data using GPT2 tokenizer...")
-    first_row = tokenizer.convert_ids_to_tokens(tokenizer.encode(data[0][2]))
-    last_row = tokenizer.convert_ids_to_tokens(tokenizer.encode(data[-1][2]))
+    first_row = tokenizer.tokenize(data[0][2])
+    last_row = tokenizer.tokenize(data[-1][2])
 
     outfile.write(f"first: {first_row}\n")
     outfile.write(f"last: {last_row}\n")
