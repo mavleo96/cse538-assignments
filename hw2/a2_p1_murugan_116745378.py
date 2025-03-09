@@ -171,10 +171,13 @@ def main() -> None:
 
     print("Initializing GPT2 tokenizer...")
     tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
-    tokenizer.bos_token = "<s>"
-    tokenizer.eos_token = "</s>"
-    tokenizer.pad_token = "<|endoftext|>"
-    tokenizer.add_tokens(["<s>", "</s>"])  # Add <s> and </s> tokens to the tokenizer
+    tokenizer.add_special_tokens(
+        {
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "pad_token": "<|endoftext|>",
+        }
+    )
 
     print("Tokenizing first and last row in input data using GPT2 tokenizer...")
     first_row = tokenizer.tokenize(data[0][2])
