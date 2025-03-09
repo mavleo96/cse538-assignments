@@ -157,6 +157,24 @@ def main() -> None:
     outfile.write(f"last: {last_row}\n")
     outfile.write("\n")
 
+    # Initialize and train TrigramLM
+    outfile.write("Checkpoint 1.2:\n")
+
+    print("Initializing and training TrigramLM...")
+    lmodel = TrigramLM(tokenizer)
+    lmodel.train([i[2] for i in data])
+
+    # Compute probabilities for given history and next tokens
+    test_cases = [
+        (["<s>", "Are", "Ġwe"], ["Ġout", "Ġin", "Ġto", "Ġpretending", "Ġonly"]),
+        (["And", "ĠI"], ["Ġwas", "'m", "Ġstood", "Ġknow", "Ġscream", "Ġpromise"]),
+    ]
+    for history_toks, next_toks in test_cases:
+        prob = lmodel.nextProb(history_toks, next_toks)
+        prob = {next_toks[i]: f"{prob[i]:.2e}" for i in range(len(next_toks))}
+        outfile.write(f"{prob}\n")
+    outfile.write("\n")
+
     # Close output file
     print("Closing output file...")
     outfile.close()
