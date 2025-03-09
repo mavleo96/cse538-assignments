@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from transformers import GPT2TokenizerFast, PreTrainedTokenizerFast
 from typing import List, Union
+from collections import defaultdict
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -28,10 +29,9 @@ class TrigramLM:
         self.vocab_size = len(tokenizer.vocab)
         assert self.vocab_size > 0, "vocab_size must be greater than 0"
 
-        self.unigram_counts = {}
-        self.bigram_counts = {}
-        self.trigram_counts = {}
-        # TODO: check if defaultdict is safe here
+        self.unigram_counts = defaultdict(int)
+        self.bigram_counts = defaultdict(lambda: defaultdict(int))
+        self.trigram_counts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 
     def train(self, data: List[List[str]]) -> None:
         """Train the TrigramLM"""
@@ -47,26 +47,16 @@ class TrigramLM:
             # Loop through the tokens in the row
             for j, _ in enumerate(row):
                 # Count unigrams
-                self.unigram_counts[row[j]] = self.unigram_counts.get(row[j], 0) + 1
+                self.unigram_counts[row[j]] += 1
 
                 # Count bigrams
                 if j > 0:
-                    if row[j - 1] not in self.bigram_counts:
-                        self.bigram_counts[row[j - 1]] = {}
-                    self.bigram_counts[row[j - 1]][row[j]] = (
-                        self.bigram_counts[row[j - 1]].get(row[j], 0) + 1
-                    )
+                    self.bigram_counts[row[j - 1]][row[j]] += 1
 
                 # Count trigrams
                 if j > 1:
-                    if row[j - 2] not in self.trigram_counts:
-                        self.trigram_counts[row[j - 2]] = {}
-                    if row[j - 1] not in self.trigram_counts[row[j - 2]]:
-                        self.trigram_counts[row[j - 2]][row[j - 1]] = {}
-                    self.trigram_counts[row[j - 2]][row[j - 1]][row[j]] = (
-                        self.trigram_counts[row[j - 2]][row[j - 1]].get(row[j], 0) + 1
-                    )
-                # TODO: check if defaultdict is safe here
+                    self.trigram_counts[row[j - 2]][row[j - 1]][row[j]] += 1
+
         return None
 
     def nextProb(self, history_toks: List[str], next_toks: List[str]) -> float:
@@ -78,27 +68,24 @@ class TrigramLM:
         # Case 1: No history
         if len(history_toks) == 0:
             # Compute unigram probabilities
-            n_counts = [self.unigram_counts.get(tok, 0) for tok in next_toks]
+            n_counts = [self.unigram_counts[tok] for tok in next_toks]
             d_counts = sum(self.unigram_counts.values())
 
         # Case 2: One history token
         elif len(history_toks) == 1:
             # Compute bigram probabilities
             prev_tok = history_toks[0]
-            n_counts = [
-                self.bigram_counts.get(prev_tok, {}).get(tok, 0) for tok in next_toks
-            ]
-            d_counts = self.unigram_counts.get(prev_tok, 0)
+            n_counts = [self.bigram_counts[prev_tok][tok] for tok in next_toks]
+            d_counts = self.unigram_counts[prev_tok]
 
         # Case 3: Two or more history tokens
         else:
             # Compute trigram probabilities
             prev_tok1, prev_tok2 = history_toks[-2:]
             n_counts = [
-                self.trigram_counts.get(prev_tok1, {}).get(prev_tok2, {}).get(tok, 0)
-                for tok in next_toks
+                self.trigram_counts[prev_tok1][prev_tok2][tok] for tok in next_toks
             ]
-            d_counts = self.bigram_counts.get(prev_tok1, {}).get(prev_tok2, 0)
+            d_counts = self.bigram_counts[prev_tok1][prev_tok2]
 
         # Return the add-one smoothed probabilities
         return self._add_one_smoothed_prob(n_counts, d_counts)
