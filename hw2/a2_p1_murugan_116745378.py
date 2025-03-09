@@ -68,15 +68,15 @@ class TrigramLM:
 
     def nextProb(self, history_toks: List[str], next_toks: List[str]) -> float:
         """Compute the probability of the next token given the history"""
-        assert hasattr(history_toks, "__len__")
-        assert hasattr(next_toks, "__len__")
-        assert len(next_toks) > 0
+        assert isinstance(history_toks, list), "history_toks must be a list"
+        assert isinstance(next_toks, list), "next_toks must be a list"
+        assert len(next_toks) > 0, "next_toks must not be empty"
 
         # Case 1: No history
         if len(history_toks) == 0:
             # Compute unigram probabilities
             n_counts = [self.unigram_counts.get(tok, 0) for tok in next_toks]
-            d_counts = self.bigram_count
+            d_counts = sum(self.unigram_counts.values())
 
         # Case 2: One history token
         elif len(history_toks) == 1:
@@ -108,8 +108,6 @@ class TrigramLM:
         self, n_counts: Union[int, List[int]], d_counts: int
     ) -> Union[float, List[float]]:
         """Internal method to compute add-one smoothed probabilities"""
-        assert d_counts > 0
-
         if isinstance(n_counts, int):
             return (n_counts + 1) / (d_counts + self.vocab_size)
         else:
