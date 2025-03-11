@@ -29,9 +29,9 @@ class TrigramLM:
         self.vocab_size = len(tokenizer.vocab)
         assert self.vocab_size > 0, "vocab_size must be greater than 0"
 
-        self.unigram_counts = defaultdict(int)
-        self.bigram_counts = defaultdict(lambda: defaultdict(int))
-        self.trigram_counts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+        self.unigram_count = defaultdict(int)
+        self.bigram_count = defaultdict(lambda: defaultdict(int))
+        self.trigram_count = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 
     def train(self, data: List[List[str]]) -> None:
         """Train the TrigramLM"""
@@ -47,15 +47,15 @@ class TrigramLM:
             # Loop through the tokens in the row
             for j, _ in enumerate(row):
                 # Count unigrams
-                self.unigram_counts[row[j]] += 1
+                self.unigram_count[row[j]] += 1
 
                 # Count bigrams
                 if j > 0:
-                    self.bigram_counts[row[j - 1]][row[j]] += 1
+                    self.bigram_count[row[j - 1]][row[j]] += 1
 
                 # Count trigrams
                 if j > 1:
-                    self.trigram_counts[row[j - 2]][row[j - 1]][row[j]] += 1
+                    self.trigram_count[row[j - 2]][row[j - 1]][row[j]] += 1
 
         return None
 
@@ -68,27 +68,27 @@ class TrigramLM:
         # Case 1: No history
         if len(history_toks) == 0:
             # Compute unigram probabilities
-            n_counts = [self.unigram_counts[tok] for tok in next_toks]
-            d_counts = sum(self.unigram_counts.values())
+            n_count = [self.unigram_count[tok] for tok in next_toks]
+            d_count = sum(self.unigram_count.values())
 
         # Case 2: One history token
         elif len(history_toks) == 1:
             # Compute bigram probabilities
             prev_tok = history_toks[0]
-            n_counts = [self.bigram_counts[prev_tok][tok] for tok in next_toks]
-            d_counts = self.unigram_counts[prev_tok]
+            n_count = [self.bigram_count[prev_tok][tok] for tok in next_toks]
+            d_count = self.unigram_count[prev_tok]
 
         # Case 3: Two or more history tokens
         else:
             # Compute trigram probabilities
             prev_tok1, prev_tok2 = history_toks[-2:]
-            n_counts = [
-                self.trigram_counts[prev_tok1][prev_tok2][tok] for tok in next_toks
+            n_count = [
+                self.trigram_count[prev_tok1][prev_tok2][tok] for tok in next_toks
             ]
-            d_counts = self.bigram_counts[prev_tok1][prev_tok2]
+            d_count = self.bigram_count[prev_tok1][prev_tok2]
 
         # Return the add-one smoothed probabilities
-        return self._add_one_smoothed_prob(n_counts, d_counts)
+        return self._add_one_smoothed_prob(n_count, d_count)
 
     def get_sequence_probability(self, sequence: List[str]) -> List[float]:
         """Get the probability of the sequence"""
@@ -105,13 +105,13 @@ class TrigramLM:
         return self.tokenizer.tokenize(text)
 
     def _add_one_smoothed_prob(
-        self, n_counts: Union[int, List[int]], d_counts: int
+        self, n_count: Union[int, List[int]], d_count: int
     ) -> Union[float, List[float]]:
         """Internal method to compute add-one smoothed probabilities"""
-        if isinstance(n_counts, int):
-            return (n_counts + 1) / (d_counts + self.vocab_size)
+        if isinstance(n_count, int):
+            return (n_count + 1) / (d_count + self.vocab_size)
         else:
-            return [(n + 1) / (d_counts + self.vocab_size) for n in n_counts]
+            return [(n + 1) / (d_count + self.vocab_size) for n in n_count]
 
 
 # ==========================
