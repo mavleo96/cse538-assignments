@@ -174,10 +174,10 @@ def init_tokenizer() -> PreTrainedTokenizerFast:
 # ==========================
 
 OBSERVATIONS = """Observations:
-The first 2 test cases are choruses where the third test case is a verse.
-The perplexity is lower for the choruses, which makes sense because the model is trained on more data for the choruses.
+We can see the perplexity for the first 2 test cases are lower than the last test case.
+The first 2 test cases are choruses which appear 38 and 27 times respectively in the training data, where as the last test case is a verse which appears 3 times in the training data.
+This explains why the perplexity is 7 times higher for the last test case, which makes sense because the model is trained on more data for the choruses.
 """
-# TODO: phrase this better
 
 
 # ==========================
@@ -245,7 +245,6 @@ def main() -> None:
         ["Are", "Ġwe", "Ġin", "Ġthe", "Ġclear", "Ġyet", "?"],
         ["August", "Ġslipped", "Ġaway", "Ġinto", "Ġa", "Ġmoment", "Ġin", "Ġtime"],
     ]
-    # TODO: check if BOS and EOS need to be included in the history
     for test_case in test_cases:
         probs = lmodel.get_sequence_probability(test_case)
         perplexity = get_perplexity(probs)
