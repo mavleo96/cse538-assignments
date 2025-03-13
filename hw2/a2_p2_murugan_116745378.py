@@ -7,8 +7,11 @@ import torch
 import re
 
 from torch.utils.data import TensorDataset, DataLoader
-from transformers import GPT2TokenizerFast, PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast
 from typing import List
+from a2_p1_murugan_116745378 import init_tokenizer
+
+
 
 # ==========================
 #     Helper Functions
@@ -104,11 +107,7 @@ def main() -> None:
 
     # Initialize GPT2 tokenizer
     print("Initializing GPT2 tokenizer...")
-    tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
-    tokenizer.bos_token = "<s>"
-    tokenizer.eos_token = "</s>"
-    tokenizer.pad_token = "<|endoftext|>"
-    tokenizer.add_tokens(["<s>", "</s>"])  # Add <s> and </s> tokens to the tokenizer
+    tokenizer = init_tokenizer()
 
     # Process the data
     processed_data = process_data(data, tokenizer)
@@ -124,8 +123,12 @@ def main() -> None:
         if row[0] == "Enchanted (Taylor's Version)"
         and row[1] == "Speak Now (Taylor's Version)"
     ]
-    test_data = process_data(test_data, tokenizer)
-    outfile.write(f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{test_data}\n')
+    processed_test_data = process_data(test_data, tokenizer)
+    outfile.write(
+        f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{processed_test_data}\n\n'
+    )
+
+    outfile.write("Checkpoint 2.2:\n")
 
     # Close output file
     print("Closing output file...")
