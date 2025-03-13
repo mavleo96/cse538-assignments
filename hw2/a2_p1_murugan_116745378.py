@@ -132,6 +132,25 @@ def get_perplexity(probs: List[float]) -> float:
 
 
 # ==========================
+#      Helper Functions
+# ==========================
+
+
+def init_tokenizer() -> PreTrainedTokenizerFast:
+    """Initialize the tokenizer"""
+    tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+    tokenizer.add_special_tokens(
+        {
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "pad_token": "<|endoftext|>",
+        }
+    )
+
+    return tokenizer
+
+
+# ==========================
 #        Observations
 # ==========================
 
@@ -170,14 +189,7 @@ def main() -> None:
     outfile.write("Checkpoint 1.1:\n")
 
     print("Initializing GPT2 tokenizer...")
-    tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
-    tokenizer.add_special_tokens(
-        {
-            "bos_token": "<s>",
-            "eos_token": "</s>",
-            "pad_token": "<|endoftext|>",
-        }
-    )
+    tokenizer = init_tokenizer()
 
     print("Tokenizing first and last row in input data using GPT2 tokenizer...")
     first_row = tokenizer.tokenize(data[0][2])
