@@ -26,6 +26,8 @@ class TrigramLM:
             type(tokenizer), PreTrainedTokenizerFast
         ), "tokenizer must be a PreTrainedTokenizerFast"
         self.tokenizer = tokenizer
+        self.unk_token = tokenizer.unk_token
+        self.vocab = tokenizer.vocab
         self.vocab_size = len(tokenizer.vocab)
         assert self.vocab_size > 0, "vocab_size must be greater than 0"
 
@@ -36,6 +38,8 @@ class TrigramLM:
     def train(self, data: List[List[str]]) -> None:
         """Train the TrigramLM"""
         # Tokenize the data
+        # Out of vocabulary tokens are handled by the tokenizer
+        # and mapped to the unk_token
         tokenized_data = [self._tokenize(i) for i in data]
 
         # Loop through the tokenized data
@@ -64,6 +68,21 @@ class TrigramLM:
         assert isinstance(history_toks, list), "history_toks must be a list"
         assert isinstance(next_toks, list), "next_toks must be a list"
         assert len(next_toks) > 0, "next_toks must not be empty"
+
+        # Handling OOV tokens
+        # Case 1: If token is not in vocab, it is mapped to unk_token by tokenizer
+        #         bur since the tokens are arguments directly, we meed to assert that
+        # Case 2: If token is in vocab, but not in counts, then it is mapped to unk_token here
+        # Both cases are handled by membership check in unigram_count
+        # TODO: Check if case 2 is correct
+        history_toks = [
+            self.unk_token if tok not in self.unigram_count else tok
+            for tok in history_toks
+        ]
+        next_toks = [
+            self.unk_token if tok not in self.unigram_count else tok
+            for tok in next_toks
+        ]
 
         # Case 1: No history
         if len(history_toks) == 0:
