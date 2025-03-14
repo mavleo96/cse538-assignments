@@ -53,6 +53,7 @@ Acceptable machine learning, or statistics libraries are listed below (see versi
 ```python
 import random, os, sys, math, csv, re, collections, string
 import numpy as np
+import csv
 
 import torch
 from torch import nn, Tensor
@@ -100,10 +101,21 @@ tokenizer = PreTrainedTokenizerFast.from_pretrained('roberta-base')
 words = tokenizer.convert_ids_to_tokens(tokenizer.encode("When did SBU open?"))
 ```
 
+Load the dataset from [songs.csv](https://github.com/shaynak/taylor-swift-lyrics/blob/main/songs.csv), keeping all except the last 5 songs as the training set. We will use pieces of the last 5 songs for out-of-sample testing.
+
+Note: You may use the following code to read the dataset (it excludes the header and last 5 songs) for both parts.
+
+```python
+with open('songs.csv', newline='') as f:
+    reader = csv.reader(f)
+    data = list(reader)[1:-5]
+```
+
+
 #### Checkpoint 1.1
 Mark the checkpoint clearly in your output: `print("\nCheckpoint 1.1:")`
 
-Print the token list for the first and last rows of the dataset.
+Print the token list for the "Lyrics" column of the first and last rows of the training set.
 ```
 first: ['This', 'Ġis', 'Ġa', 'Ġnewer', 'Ġtest', 'Ġof', 'Ġtoken', 'izing', 'Ġfrom', 'ĠSt', 'ony', 'ĠBrook', 'ĠUniversity', '.']
 last: ['S', 'ton', 'y', 'ĠBrook', 'ĠUniversity', 'Ġwas', 'Ġfounded', 'Ġand', 'Ġfirst', 'Ġheld', 'Ġclasses', 'Ġin', 'Ġ1967', '.', 'Ġ', 'ĠWhen', 'Ġdid', 'ĠSB', 'U', 'Ġopen', '?']
@@ -112,7 +124,7 @@ Note: Above is an example output, not the answer. Remember that Ġ is the space 
 
 ### 1.2 Smoothed Trigram Language Model
 
-Make a class, `TrigramLM`, that creates and trains a trigram language model. The LM should be trained on all songs from the dataset. In particular, `TrigramLM` must have the following instance methods:
+Make a class, `TrigramLM`, that creates and trains a trigram language model. The LM should be trained on all songs from the training set. In particular, `TrigramLM` must have the following instance methods:
 
 #### **Methods:**
 1. `trigramLM.train(datasets)`: Stores data necessary to be able to compute smoothed trigram and unigram probabilities (see more specifics below). Does not need to return anything.
@@ -151,9 +163,11 @@ def get_perplexity(probs):
 #### Checkpoint 1.3  
 Print the perplexity for the following cases:
 
-1. `['Are', 'Ġwe', 'Ġout', 'Ġof', 'Ġthe', 'Ġwoods', 'Ġyet', '?']`
-2. `['Are', 'Ġwe', 'Ġin', 'Ġthe', 'Ġclear', 'Ġyet', '?']`
-3. `['August', 'Ġslipped', 'Ġaway', 'Ġinto', 'Ġa', 'Ġmoment', 'Ġin', 'Ġtime']`
+1. `['And', 'Ġyou', 'Ġgotta', 'Ġlive', 'Ġwith', 'Ġthe', 'Ġbad', 'Ġblood', 'Ġnow']`
+2. `['Sit', 'Ġquiet', 'Ġby', 'Ġmy', 'Ġside', 'Ġin', 'Ġthe', 'Ġshade']`
+3. `['And', 'ĠI', "'m", 'Ġnot', 'Ġeven', 'Ġsorry', ',', 'Ġnights', 'Ġare', 'Ġso', 'Ġstar', 'ry']`
+4. `['You', 'Ġmake', 'Ġme', 'Ġcraz', 'ier', ',', 'Ġcraz', 'ier', ',', 'Ġcraz', 'ier', ',', 'Ġoh']`
+5. `['When', 'Ġtime', 'Ġstood', 'Ġstill', 'Ġand', 'ĠI', 'Ġhad', 'Ġyou']`
 
 What are your observations about these results? Are the values similar or different? What is one major reason for this? (2-4 lines).  
 
@@ -187,7 +201,7 @@ def chunk_tokens(tokens, start_token_id, end_token_id, pad_token_id, chunk_len=1
     return chunks
 ```
 
-Load [songs.csv](https://github.com/shaynak/taylor-swift-lyrics/blob/main/songs.csv). Process each row in the "Lyrics" column to obtain a tensor of shape (#chunks_in_song, chunk_len):
+Load [songs.csv](https://github.com/shaynak/taylor-swift-lyrics/blob/main/songs.csv) excluding the last 5 songs. Process each row in the training set's "Lyrics" column to obtain a tensor of shape (#chunks_in_song, chunk_len):
 1. Remove section markers such as [Bridge], [Chorus], etc. by using the regex pattern `r'\n\[[\x20-\x7f]+\]'` to replace it with an empty string.
 2. Tokenize current row’s lyrics to get a list of token ids.
 3. Call `chunk_tokens` on the list of token ids using `chunk_len = 64`.
@@ -266,9 +280,11 @@ def trainLM(model, data, pad_token_id, learning_rate, device):
 #### Checkpoint 2.3
 1. Plot the training set loss curves. It should have loss on the y-axis and epochs on the x-axis. Paste the loss curve into your output file and save it as a pdf.
 2. Compute the perplexity of the model on the samples (you can use `get_perplexity` from Part 1.3)
-    - "Are we out of the woods yet?"
-    - "Are we in the clear yet?"
-    - "August slipped away into a moment in time"
+    - "And you gotta live with the bad blood now"
+    - "Sit quiet by my side in the shade"
+    - "And I'm not even sorry, nights are so starry"
+    - "You make me crazier, crazier, crazier, oh"
+    - "When time stood still and I had you"
 3. Compare the perplexity scores with Part 1.3. How does the RNN-based LM perform in comparison? Provide a brief reason why it is or isn't better.
 
 ### 2.4 Autoregressive Lyric Generation
@@ -317,7 +333,7 @@ Submit the following 4 files containing the output of your code as well as your 
 3. `a2_p2_lastname_id.py`
 4. `a2_p2_lastname_id_OUTPUT.pdf`
 
-**Please do not upload a zip or a notbook file. Double-check that your files are there and correct after uploading and make sure to submit.**  Uploading files that are zips or any other type than .py, .pdf, or .txt files will result in the submission being considered invalid. Partially uploaded files or non-submitted files will count as unsubmitted.
+**Please do not upload a zip or a notebook file. Double-check that your files are there and correct after uploading and make sure to submit.**  Uploading files that are zips or any other type than .py, .pdf, or .txt files will result in the submission being considered invalid. Partially uploaded files or non-submitted files will count as unsubmitted.
 
 If submitting multiple times, only the last submission will be graded. If it is late, the penalty will apply even if earlier submissions were made.
 
