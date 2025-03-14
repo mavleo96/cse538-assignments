@@ -91,10 +91,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Read and process input data
-    with open(args.filepath, "r") as f:
+    with open(args.filepath, "r", newline="") as f:
         reader = csv.reader(f)
-        header = next(reader)
-        data = [row for row in reader]
+        data = list(reader)[1:-5]
 
     # Create and open output file
     print("Creating output file...")

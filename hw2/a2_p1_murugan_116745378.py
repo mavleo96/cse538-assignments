@@ -194,10 +194,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Read and process input data
-    with open(args.filepath, "r") as f:
+    with open(args.filepath, "r", newline="") as f:
         reader = csv.reader(f)
-        header = next(reader)
-        data = [row for row in reader]
+        data = list(reader)[1:-5]
 
     # Create and open output file
     print("Creating output file...")
@@ -210,7 +209,7 @@ def main() -> None:
     print("Initializing GPT2 tokenizer...")
     tokenizer = init_tokenizer()
 
-    print("Tokenizing first and last row in input data using GPT2 tokenizer...")
+    print("Tokenizing first and last row of training data using GPT2 tokenizer...")
     first_row = tokenizer.tokenize(data[0][2])
     last_row = tokenizer.tokenize(data[-1][2])
 
@@ -241,9 +240,38 @@ def main() -> None:
 
     print("Computing perplexity...")
     test_cases = [
-        ["Are", "Ġwe", "Ġout", "Ġof", "Ġthe", "Ġwoods", "Ġyet", "?"],
-        ["Are", "Ġwe", "Ġin", "Ġthe", "Ġclear", "Ġyet", "?"],
-        ["August", "Ġslipped", "Ġaway", "Ġinto", "Ġa", "Ġmoment", "Ġin", "Ġtime"],
+        ["And", "Ġyou", "Ġgotta", "Ġlive", "Ġwith", "Ġthe", "Ġbad", "Ġblood", "Ġnow"],
+        ["Sit", "Ġquiet", "Ġby", "Ġmy", "Ġside", "Ġin", "Ġthe", "Ġshade"],
+        [
+            "And",
+            "ĠI",
+            "'m",
+            "Ġnot",
+            "Ġeven",
+            "Ġsorry",
+            ",",
+            "Ġnights",
+            "Ġare",
+            "Ġso",
+            "Ġstar",
+            "ry",
+        ],
+        [
+            "You",
+            "Ġmake",
+            "Ġme",
+            "Ġcraz",
+            "ier",
+            ",",
+            "Ġcraz",
+            "ier",
+            ",",
+            "Ġcraz",
+            "ier",
+            ",",
+            "Ġoh",
+        ],
+        ["When", "Ġtime", "Ġstood", "Ġstill", "Ġand", "ĠI", "Ġhad", "Ġyou"],
     ]
     for test_case in test_cases:
         probs = lmodel.get_sequence_probability(test_case)
