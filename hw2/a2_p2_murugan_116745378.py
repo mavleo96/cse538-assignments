@@ -44,16 +44,20 @@ class RecurrentLM(nn.Module):
 
         return logits, hidden_state
 
-    # def stepwise_forward(self, x, prev_hidden_state):
-    # input: x: tensor of shape (seq_len)
-    #       hidden_state: hidden state of GRU after processing x (single token)
-    # <FILL IN at Part 2.4>
+    def stepwise_forward(
+        self, x: torch.Tensor, prev_hidden_state: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Stepwise forward pass through the model"""
+        x = self.embedding(x)
+        x, hidden_state = self.gru(x, prev_hidden_state)
+        x = self.layer_norm(x)
+        logits = self.classifier(x)
 
-    # return logits, hidden_state
+        return logits, hidden_state
 
 
 # ==========================
-#     Training Functions
+#  Training and Generation
 # ==========================
 
 
@@ -63,15 +67,15 @@ def trainLM(
     pad_token_id: int,
     learning_rate: float,
     device: str,
-) -> Tuple[nn.Module, List[float]]:
+) -> List[float]:
     """Train the language model"""
     num_epochs = 15
+
+    model.to(device)  # Move model to device
 
     # Initialize optimizer and loss function
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_fn = nn.CrossEntropyLoss(ignore_index=pad_token_id)
-    model.to(device)
-    loss_fn.to(device)
 
     # Loop through epochs
     losses = []
@@ -88,7 +92,9 @@ def trainLM(
 
             optimizer.zero_grad(set_to_none=True)
             logits, _ = model(X)
-            loss = loss_fn(logits.view(-1, logits.shape[-1]), y.view(-1))
+            loss = loss_fn(
+                logits.transpose(1, 2), y
+            )  # loss_fn expects ((b, c, ..), (b, ..))
             loss.backward()
             optimizer.step()
 
@@ -96,7 +102,48 @@ def trainLM(
 
         losses.append(epoch_loss / len(data))  # Append average loss for epoch
 
-    return model, losses
+    return losses
+
+
+def generate(
+    model: nn.Module,
+    tokenizer: PreTrainedTokenizerFast,
+    start_phrase: str,
+    max_len: int,
+    device: str,
+    sample: bool = False,
+) -> List[int]:
+    """Generate a sequence of tokens from the model"""
+    # shape should be (b, s) to be compatible with layer norm in the model
+    start_tokens = torch.tensor(
+        tokenizer.encode(start_phrase), device=device, dtype=torch.long
+    ).unsqueeze(0)
+    generated_tokens = []
+
+    model.eval()
+    with torch.no_grad():
+        logits, hidden_state = model(start_tokens)
+        if sample:
+            next_token = torch.distributions.Categorical(
+                logits=logits[:, -1:, :]
+            ).sample()
+        else:
+            next_token = torch.argmax(logits, dim=2)[:, -1:]
+        generated_tokens.append(next_token.item())
+
+        while (len(generated_tokens) < max_len) and (
+            generated_tokens[-1] not in [tokenizer.eos_token_id, tokenizer.pad_token_id]
+        ):
+            logits, hidden_state = model.stepwise_forward(next_token, hidden_state)
+            if sample:
+                next_token = torch.distributions.Categorical(
+                    logits=logits[:, -1:, :]
+                ).sample()
+            else:
+                next_token = torch.argmax(logits, dim=2)[:, -1:]
+            generated_tokens.append(next_token.item())
+
+    return generated_tokens
 
 
 # ==========================
@@ -184,7 +231,6 @@ def main() -> None:
         "--learning_rate", type=float, default=0.0007, help="learning rate"
     )
     parser.add_argument("--save_model", action="store_true", help="save the model")
-
     args = parser.parse_args()
     device = (
         "cuda"
@@ -243,11 +289,12 @@ def main() -> None:
     outfile.write("Checkpoint 2.3:\n")
 
     # Initialize and train RecurrentLM
+    outfile.write("Checkpoint 2.3:\n")
     print("Initializing model...")
     model = RecurrentLM(len(tokenizer.vocab), args.embed_dim, args.rnn_hidden_dim)
 
     print("Training model...")
-    model, losses = trainLM(
+    losses = trainLM(
         model, dataloader, tokenizer.pad_token_id, args.learning_rate, device
     )
     if args.save_model:
@@ -272,12 +319,10 @@ def main() -> None:
         "You make me crazier, crazier, crazier, oh",
         "When time stood still and I had you",
     ]
-    for i in test_data:
-        tokens = tokenizer.encode(i)
-        input_tensor = torch.tensor(
-            [tokenizer.bos_token_id] + tokens[:-1], device=device
-        )
-        output_tensor = torch.tensor(tokens, device=device)
+    for seq in test_data:
+        tokens = [tokenizer.bos_token_id] + tokenizer.encode(seq)
+        token_tensor = torch.tensor(tokens, device=device, dtype=torch.long)
+        input_tensor, output_tensor = token_tensor[:-1], token_tensor[1:]
 
         model.eval()
         with torch.no_grad():
@@ -290,7 +335,36 @@ def main() -> None:
             )
 
         perplexity = get_perplexity(probabilities)
-        outfile.write(f"'{i}': {perplexity:.2f}\n")
+        outfile.write(f"'{seq}': {perplexity:.2f}\n")
+    outfile.write("\n")
+
+    # TODO: add observation about perplexity
+
+    # Stepwise forward pass
+    outfile.write("Checkpoint 2.4:\n")
+    test_data = [
+        "<s>Are we",
+        "<s>Like we're made of starlight, starlight",
+        "<s>I hate Calvin Harris and he is",
+    ]
+    for i, seq in enumerate(test_data):
+        outfile.write(f"====== Song {i+1} =====\n")
+        generated_tokens = generate(model, tokenizer, seq, 64, device)
+        text = tokenizer.decode(generated_tokens)
+        outfile.write(f"{seq}{text}\n")
+        outfile.write(f"===================\n")
+        outfile.write("\n")
+
+    # Stepwise forward pass with sampling
+    outfile.write("\nCheckpoint 2.5: Extra Credit\n")
+    for i, seq in enumerate(test_data):
+        outfile.write(f"====== Song {i+1} =====\n")
+        generated_tokens = generate(model, tokenizer, seq, 64, device, sample=True)
+        text = tokenizer.decode(generated_tokens)
+        outfile.write(f"{seq}{text}\n")
+        outfile.write(f"===================\n")
+        outfile.write("\n")
+    # TODO: add observation on content of generated text
 
     # Close output file
     print("Closing output file...")
