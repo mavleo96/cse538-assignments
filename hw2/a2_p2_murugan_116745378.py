@@ -5,6 +5,7 @@ import argparse
 import csv
 import torch
 import re
+import numpy as np
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
@@ -12,8 +13,11 @@ from torch.utils.data import TensorDataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 from tqdm import tqdm
 from typing import List, Tuple
-from a2_p1_murugan_116745378 import init_tokenizer
+from a2_p1_murugan_116745378 import init_tokenizer, get_perplexity
 
+
+np.random.seed(0)
+torch.manual_seed(0)
 
 # ==========================
 #     RecurrentLM Class
@@ -236,7 +240,6 @@ def main() -> None:
         f"Logits shape: {logits_shape}\nHidden state shape: {hidden_state_shape}\n\n"
     )
 
-    # Initialize and train RecurrentLM
     outfile.write("Checkpoint 2.3:\n")
 
     # Initialize and train RecurrentLM
@@ -258,6 +261,36 @@ def main() -> None:
     plt.title("Training Losses")
     plt.savefig("results/training_plot.png", dpi=300, bbox_inches="tight")
     outfile.write("Losses plot saved to results/training_plot.png\n\n")
+
+    # Evaluate model perplexity for test data
+    print("Evaluating model perplexity for test data...")
+    outfile.write("Perplexity for test data:\n")
+    test_data = [
+        "And you gotta live with the bad blood now",
+        "Sit quiet by my side in the shade",
+        "And I'm not even sorry, nights are so starry",
+        "You make me crazier, crazier, crazier, oh",
+        "When time stood still and I had you",
+    ]
+    for i in test_data:
+        tokens = tokenizer.encode(i)
+        input_tensor = torch.tensor(
+            [tokenizer.bos_token_id] + tokens[:-1], device=device
+        )
+        output_tensor = torch.tensor(tokens, device=device)
+
+        model.eval()
+        with torch.no_grad():
+            logits, _ = model(input_tensor)
+            probabilities = torch.softmax(logits, dim=1)
+            probabilities = (
+                torch.gather(probabilities, 1, output_tensor.unsqueeze(1))
+                .squeeze(1)
+                .tolist()
+            )
+
+        perplexity = get_perplexity(probabilities)
+        outfile.write(f"'{i}': {perplexity:.2f}\n")
 
     # Close output file
     print("Closing output file...")
