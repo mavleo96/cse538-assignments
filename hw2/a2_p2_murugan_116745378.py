@@ -50,7 +50,7 @@ def chunk_tokens(
 
 
 def process_data(
-    data: List[List[str]], tokenizer: PreTrainedTokenizerFast
+    data: List[List[str]], tokenizer: PreTrainedTokenizerFast, chunk_len: int
 ) -> torch.Tensor:
     """Process, tokenize, and chunk the data"""
     PATTERN = r"\n\[[\x20-\x7f]+\]"
@@ -66,7 +66,7 @@ def process_data(
             tokenizer.bos_token_id,
             tokenizer.eos_token_id,
             tokenizer.pad_token_id,
-            64,
+            chunk_len,
         )
         for tokens in tokenized_data
     ]
@@ -88,6 +88,8 @@ def main() -> None:
         description="script to run cse538 assignment 2 part 2"
     )
     parser.add_argument("filepath", type=str, help="path to the input file")
+    parser.add_argument("--batch_size", type=int, default=32, help="batch size")
+    parser.add_argument("--chunk_len", type=int, default=64, help="chunk length")
     args = parser.parse_args()
 
     # Read and process input data
@@ -109,11 +111,11 @@ def main() -> None:
     tokenizer = init_tokenizer()
 
     # Process the data
-    processed_data = process_data(data, tokenizer)
+    processed_data = process_data(data, tokenizer, chunk_len=args.chunk_len)
     X = processed_data[:, :-1]
     y = processed_data[:, 1:]
     dataset = TensorDataset(X, y)
-    dataloader = DataLoader(dataset, batch_size=32, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, drop_last=True)
 
     # Output chunked tensor for "Enchanted (Taylor's Version)"
     test_data = [
@@ -122,7 +124,7 @@ def main() -> None:
         if row[0] == "Enchanted (Taylor's Version)"
         and row[1] == "Speak Now (Taylor's Version)"
     ]
-    processed_test_data = process_data(test_data, tokenizer)
+    processed_test_data = process_data(test_data, tokenizer, chunk_len=args.chunk_len)
     outfile.write(
         f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{processed_test_data}\n\n'
     )
