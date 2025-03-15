@@ -280,11 +280,11 @@ def trainLM(model, data, pad_token_id, learning_rate, device):
 #### Checkpoint 2.3
 1. Plot the training set loss curves. It should have loss on the y-axis and epochs on the x-axis. Paste the loss curve into your output file and save it as a pdf.
 2. Compute the perplexity of the model on the samples (you can use `get_perplexity` from Part 1.3)
-    - "And you gotta live with the bad blood now"
-    - "Sit quiet by my side in the shade"
-    - "And I'm not even sorry, nights are so starry"
-    - "You make me crazier, crazier, crazier, oh"
-    - "When time stood still and I had you"
+    - `"And you gotta live with the bad blood now"`
+    - `"Sit quiet by my side in the shade"`
+    - `"And I'm not even sorry, nights are so starry"`
+    - `"You make me crazier, crazier, crazier, oh"`
+    - `"When time stood still and I had you"`
 3. Compare the perplexity scores with Part 1.3. How does the RNN-based LM perform in comparison? Provide a brief reason why it is or isn't better.
 
 ### 2.4 Autoregressive Lyric Generation
