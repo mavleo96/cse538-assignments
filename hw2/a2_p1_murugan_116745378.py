@@ -169,9 +169,9 @@ def init_tokenizer() -> PreTrainedTokenizerFast:
 # ==========================
 
 OBSERVATIONS = """Observations:
-We can see the perplexity for the first 2 test cases are lower than the last test case.
-The first 2 test cases are choruses which appear 38 and 27 times respectively in the training data, where as the last test case is a verse which appears 3 times in the training data.
-This explains why the perplexity is 7 times higher for the last test case, which makes sense because the model is trained on more data for the choruses.
+We see that the perplexity for the first and third test cases are lower than the rest.
+This is because atleast one sequence of words in these test cases have appeared in the training data
+while all the sequences in rest of the test cases seem to be relatively unseen.
 """
 
 
