@@ -123,14 +123,9 @@ class TrigramLM:
         """Internal method to tokenize text"""
         return self.tokenizer.tokenize(text)
 
-    def _add_one_smoothed_prob(
-        self, n_count: Union[int, List[int]], d_count: int
-    ) -> Union[float, List[float]]:
+    def _add_one_smoothed_prob(self, n_count: List[int], d_count: int) -> List[float]:
         """Internal method to compute add-one smoothed probabilities"""
-        if isinstance(n_count, int):
-            return (n_count + 1) / (d_count + self.vocab_size)
-        else:
-            return [(n + 1) / (d_count + self.vocab_size) for n in n_count]
+        return [(n + 1) / (d_count + self.vocab_size) for n in n_count]
 
 
 # ==========================
@@ -273,10 +268,10 @@ def main() -> None:
         ],
         ["When", "Ġtime", "Ġstood", "Ġstill", "Ġand", "ĠI", "Ġhad", "Ġyou"],
     ]
-    for test_case in test_cases:
-        probs = lmodel.get_sequence_probability(test_case)
+    for seq in test_cases:
+        probs = lmodel.get_sequence_probability(seq)
         perplexity = get_perplexity(probs)
-        outfile.write(f"{test_case}: {perplexity:.2f}\n")
+        outfile.write(f"'{''.join(seq).replace('Ġ', ' ')}': {perplexity:.2f}\n")
     outfile.write("\n")
 
     # Observations
