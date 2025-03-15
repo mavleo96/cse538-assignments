@@ -161,6 +161,7 @@ def chunk_tokens(
     """Chunk tokens into chunks of length chunk_len"""
     u_chunk_len = chunk_len - 2  # Remove start and end tokens from chunk length
     assert u_chunk_len > 0, "Chunk length must be greater than 2"
+    assert len(tokens) > 0, "Tokens must not be empty"
 
     # Pad tokens if necessary
     pad_count = (
@@ -171,14 +172,15 @@ def chunk_tokens(
     tokens += [pad_token_id] * pad_count
 
     # Chunk tokens by reshaping
-    chunked_tokens = torch.tensor(tokens).reshape(-1, u_chunk_len)
+    chunked_tokens = torch.tensor(tokens, dtype=torch.long).reshape(-1, u_chunk_len)
     n_chunks = chunked_tokens.shape[0]
 
     # Concatenate BOS and EOS tokens
-    bos_tensor = torch.full((n_chunks, 1), start_token_id)
-    eos_tensor = torch.full((n_chunks, 1), end_token_id)
+    bos_tensor = torch.full((n_chunks, 1), start_token_id, dtype=torch.long)
+    eos_tensor = torch.full((n_chunks, 1), end_token_id, dtype=torch.long)
     chunks = torch.cat((bos_tensor, chunked_tokens, eos_tensor), dim=1)
 
+    assert chunks.shape == (n_chunks, chunk_len), "Chunked tokens shape mismatch"
     return chunks
 
 
@@ -186,10 +188,12 @@ def process_data(
     data: List[List[str]], tokenizer: PreTrainedTokenizerFast, chunk_len: int
 ) -> torch.Tensor:
     """Process, tokenize, and chunk the data"""
-    PATTERN = r"\n\[[\x20-\x7f]+\]"
+    assert len(data) > 0, "Data must not be empty"
+    assert all(len(row) == 3 for row in data), "Data must have 3 columns"
 
     # Remove section markers and tokenize the data
-    data = [re.sub(PATTERN, "", row[2]) for row in data]
+    pattern = r"\n\[[\x20-\x7f]+\]"
+    data = [re.sub(pattern, "", row[2]) for row in data]
     tokenized_data = [tokenizer.encode(row) for row in data]
 
     # Chunk the tokens
@@ -259,8 +263,7 @@ def main() -> None:
 
     # Process the data
     processed_data = process_data(data, tokenizer, chunk_len=args.chunk_len)
-    X = processed_data[:, :-1]
-    y = processed_data[:, 1:]
+    X, y = processed_data[:, :-1], processed_data[:, 1:]
     dataset = TensorDataset(X, y)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, drop_last=True)
 
@@ -273,8 +276,9 @@ def main() -> None:
     ]
     processed_test_data = process_data(test_data, tokenizer, chunk_len=args.chunk_len)
     outfile.write(
-        f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{processed_test_data}\n\n'
+        f'Chunked tensor for "Enchanted (Taylor\'s Version)":\n{processed_test_data}\n'
     )
+    outfile.write("\n")
 
     # Print shape of logits and hidden state
     outfile.write("Checkpoint 2.2:\n")
@@ -283,10 +287,9 @@ def main() -> None:
     logits_shape = f"(batch_size, chunk_len - 1, vocab_size) -> ({args.batch_size}, {args.chunk_len - 1}, {len(tokenizer.vocab)})"
     hidden_state_shape = f"(num_layers, batch_size, rnn_hidden_dim) -> (1, {args.batch_size}, {args.rnn_hidden_dim})"
     outfile.write(
-        f"Logits shape: {logits_shape}\nHidden state shape: {hidden_state_shape}\n\n"
+        f"Logits shape: {logits_shape}\nHidden state shape: {hidden_state_shape}\n"
     )
-
-    outfile.write("Checkpoint 2.3:\n")
+    outfile.write("\n")
 
     # Initialize and train RecurrentLM
     outfile.write("Checkpoint 2.3:\n")
