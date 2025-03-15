@@ -59,7 +59,7 @@ def trainLM(
     pad_token_id: int,
     learning_rate: float,
     device: str,
-) -> List[float]:
+) -> Tuple[nn.Module, List[float]]:
     """Train the language model"""
     num_epochs = 15
 
@@ -92,7 +92,7 @@ def trainLM(
 
         losses.append(epoch_loss / len(data))  # Append average loss for epoch
 
-    return losses
+    return model, losses
 
 
 # ==========================
@@ -179,6 +179,8 @@ def main() -> None:
     parser.add_argument(
         "--learning_rate", type=float, default=0.0007, help="learning rate"
     )
+    parser.add_argument("--save_model", action="store_true", help="save the model")
+
     args = parser.parse_args()
     device = (
         "cuda"
@@ -237,20 +239,25 @@ def main() -> None:
     # Initialize and train RecurrentLM
     outfile.write("Checkpoint 2.3:\n")
 
+    # Initialize and train RecurrentLM
     print("Initializing model...")
     model = RecurrentLM(len(tokenizer.vocab), args.embed_dim, args.rnn_hidden_dim)
 
     print("Training model...")
-    losses = trainLM(
+    model, losses = trainLM(
         model, dataloader, tokenizer.pad_token_id, args.learning_rate, device
     )
+    if args.save_model:
+        print("Saving model weights to results/model.pt...")
+        torch.save(model.state_dict(), "results/model.pt")
 
     print("Saving losses plot...")
     plt.plot(losses)
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.title("Training Losses")
-    plt.savefig("results/train_losses.png")
+    plt.savefig("results/training_plot.png", dpi=300, bbox_inches="tight")
+    outfile.write("Losses plot saved to results/training_plot.png\n\n")
 
     # Close output file
     print("Closing output file...")
