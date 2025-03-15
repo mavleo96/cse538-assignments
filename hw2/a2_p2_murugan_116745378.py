@@ -6,9 +6,11 @@ import csv
 import torch
 import re
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import PreTrainedTokenizerFast
+from tqdm import tqdm
 from typing import List, Tuple
 from a2_p1_murugan_116745378 import init_tokenizer
 
@@ -45,6 +47,52 @@ class RecurrentLM(nn.Module):
 
     # return logits, hidden_state
 
+
+# ==========================
+#     Training Functions
+# ==========================
+
+
+def trainLM(
+    model: nn.Module,
+    data: DataLoader,
+    pad_token_id: int,
+    learning_rate: float,
+    device: str,
+) -> List[float]:
+    """Train the language model"""
+    num_epochs = 15
+
+    # Initialize optimizer and loss function
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=pad_token_id)
+    model.to(device)
+    loss_fn.to(device)
+
+    # Loop through epochs
+    losses = []
+    model.train()
+    for _ in tqdm(range(num_epochs), desc="Epochs"):
+        epoch_loss = 0
+
+        # Loop through batches
+        for batch in data:
+            # Get batch data and move to device
+            X, y = batch
+            X = X.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
+
+            optimizer.zero_grad(set_to_none=True)
+            logits, _ = model(X)
+            loss = loss_fn(logits.view(-1, logits.shape[-1]), y.view(-1))
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()  # Accumulate loss
+
+        losses.append(epoch_loss / len(data))  # Append average loss for epoch
+
+    return losses
 
 
 # ==========================
@@ -132,6 +180,12 @@ def main() -> None:
         "--learning_rate", type=float, default=0.0007, help="learning rate"
     )
     args = parser.parse_args()
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
+    print(f"Using device: {device}")
 
     # Read and process input data
     with open(args.filepath, "r", newline="") as f:
@@ -180,6 +234,23 @@ def main() -> None:
         f"Logits shape: {logits_shape}\nHidden state shape: {hidden_state_shape}\n\n"
     )
 
+    # Initialize and train RecurrentLM
+    outfile.write("Checkpoint 2.3:\n")
+
+    print("Initializing model...")
+    model = RecurrentLM(len(tokenizer.vocab), args.embed_dim, args.rnn_hidden_dim)
+
+    print("Training model...")
+    losses = trainLM(
+        model, dataloader, tokenizer.pad_token_id, args.learning_rate, device
+    )
+
+    print("Saving losses plot...")
+    plt.plot(losses)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training Losses")
+    plt.savefig("results/train_losses.png")
 
     # Close output file
     print("Closing output file...")
