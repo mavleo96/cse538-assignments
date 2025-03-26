@@ -187,7 +187,7 @@ In this part, your objective is to implement the language modeling task using a 
 
 ### 2.1 Preparing the dataset
 
-Now fill in the `chunk_tokens` function below. The function should split a larger token sequence into multiple, smaller sequences of size `chunk_len - 2`. Append the BOS token id as the first and EOS as the last index of the chunk. Sometimes the last chunk may not have the required number of tokens, so fill in the gap using the pad token.
+Now fill in the `chunk_tokens` function below. The function should split a larger token sequence into multiple, smaller sequences of size `chunk_len - 2`. Append the BOS token id at the start and EOS token id at the end of the chunk. If the number of tokens are less than chunk_size, then append pad tokens after EOS.
 
 Same sequence length enables batch processing, which saves time during model training.
 
