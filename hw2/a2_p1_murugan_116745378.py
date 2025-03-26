@@ -79,22 +79,13 @@ class TrigramLM:
             for tok in next_toks
         ]
 
-        # Case 1: No history
-        if len(history_toks) == 0:
-            # Compute unigram probabilities
+        # Case 1: Unigram probabilities for one or no history tokens
+        if len(history_toks) < 2:
             n_count = [self.unigram_count[tok] for tok in next_toks]
             d_count = sum(self.unigram_count.values())
 
-        # Case 2: One history token
-        elif len(history_toks) == 1:
-            # Compute bigram probabilities
-            prev_tok = history_toks[0]
-            n_count = [self.bigram_count[prev_tok][tok] for tok in next_toks]
-            d_count = self.unigram_count[prev_tok]
-
-        # Case 3: Two or more history tokens
+        # Case 2: Trigram probabilities for two or more history tokens
         else:
-            # Compute trigram probabilities
             prev_tok1, prev_tok2 = history_toks[-2:]
             n_count = [
                 self.trigram_count[prev_tok1][prev_tok2][tok] for tok in next_toks
