@@ -31,6 +31,7 @@ class TrigramLM:
         self.vocab_size = len(tokenizer.vocab)
         assert self.vocab_size > 0, "vocab_size must be greater than 0"
 
+        # Intialize the n-gram counts
         self.unigram_count = defaultdict(int)
         self.bigram_count = defaultdict(lambda: defaultdict(int))
         self.trigram_count = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
@@ -44,11 +45,6 @@ class TrigramLM:
 
         # Loop through the tokenized data
         for row in tqdm(tokenized_data, desc="Training TrigramLM"):
-            assert len(row) > 0, "row must not be empty"
-            # Add <s> and </s> tokens to the row
-            row = ["<s>"] + row + ["</s>"]
-
-            # Loop through the tokens in the row
             for j, _ in enumerate(row):
                 # Count unigrams
                 self.unigram_count[row[j]] += 1
@@ -71,10 +67,9 @@ class TrigramLM:
 
         # Handling OOV tokens
         # Case 1: If token is not in vocab, it is mapped to unk_token by tokenizer
-        #         bur since the tokens are arguments directly, we meed to assert that
+        #         but since the tokens are arguments directly, we meed to assert that
         # Case 2: If token is in vocab, but not in counts, then it is mapped to unk_token here
         # Both cases are handled by membership check in unigram_count
-        # TODO: Check if case 2 is correct
         history_toks = [
             self.unk_token if tok not in self.unigram_count else tok
             for tok in history_toks
@@ -117,11 +112,14 @@ class TrigramLM:
             next_toks = sequence[i : i + 1]
             probs.extend(self.nextProb(history_toks, next_toks))
 
+        assert len(probs) == len(sequence), "probs and sequence must have same length"
         return probs
 
     def _tokenize(self, text: str) -> List[str]:
         """Internal method to tokenize text"""
-        return self.tokenizer.tokenize(text)
+        assert len(text) > 0, "text must not be empty"
+        # Add <s> and </s> tokens to the row
+        return ["<s>"] + self.tokenizer.tokenize(text) + ["</s>"]
 
     def _add_one_smoothed_prob(self, n_count: List[int], d_count: int) -> List[float]:
         """Internal method to compute add-one smoothed probabilities"""
@@ -173,7 +171,7 @@ We see that the perplexity for the first and third test cases are lower than the
 This is because atleast one sequence of words in these test cases have appeared in the training data
 while all the sequences in rest of the test cases seem to be relatively unseen.
 """
-
+# TODO: Update observations
 
 # ==========================
 #     Main Function
