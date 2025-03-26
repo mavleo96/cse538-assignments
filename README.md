@@ -5,6 +5,8 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 ## Repository Structure
 ```
 .
+├── .gitignore
+├── README.md
 ├── environment_linux.yml
 ├── environment_mac.yml
 ├── hw1
@@ -15,7 +17,10 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 │   ├── data
 │   │   ├── daily547_3pos.txt
 │   │   └── daily547_tweets.txt
-│   └── results/
+│   └── submission
+│       ├── a1_p1_murugan_116745378_OUTPUT.txt
+│       ├── a1_p2_murugan_116745378_OUTPUT.pdf
+│       └── a1_p2_murugan_116745378_OUTPUT.txt
 ├── hw2
 │   ├── README.md
 │   ├── a2_exp_nb.ipynb
@@ -23,8 +28,9 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 │   ├── a2_p2_murugan_116745378.py
 │   ├── data
 │   │   └── songs.csv
-│   └── results/
-├── hw3/
+│   └── submission
+│       ├── a2_p1_murugan_116745378_OUTPUT.txt
+│       └── a2_p2_murugan_116745378_OUTPUT.pdf
 └── practice/
 ```
 
@@ -48,10 +54,10 @@ conda activate cse538
 ## Assignments
 
 ### Assignment 1: Text Classification and Word Embeddings
-Implements tokenization techniques and POS tagging models using Twitter data, focusing on text preprocessing and classification tasks.
+Implementaion of regex and byte pair encoding tokenization techniques and POS tagging models using Twitter data, focusing on text preprocessing and classification tasks.
 
 ### Assignment 2: Language Models and Text Generation
-Develops N-gram and RNN-based language models for text generation, using song lyrics to compare different modeling approaches.
+Development of N-gram and RNN-based language models for text generation, using song lyrics to compare different modeling approaches.
 
 > Note: Detailed requirements, datasets, and instructions for each assignment can be found in their respective directories (`hwX/README.md`).
 
