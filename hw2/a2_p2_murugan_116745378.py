@@ -9,6 +9,7 @@ import numpy as np
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
+from itertools import batched
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 from tqdm import tqdm
@@ -163,24 +164,24 @@ def chunk_tokens(
     assert u_chunk_len > 0, "Chunk length must be greater than 2"
     assert len(tokens) > 0, "Tokens must not be empty"
 
-    # Pad tokens if necessary
-    pad_count = (
-        (u_chunk_len - len(tokens) % u_chunk_len)
-        if len(tokens) % u_chunk_len != 0
-        else 0
-    )
-    tokens += [pad_token_id] * pad_count
+    # Chunk tokens into batches
+    chunked_list = []
+    for batch in batched(tokens, u_chunk_len):
+        batch = [start_token_id, *batch, end_token_id]
+        # Pad with pad_token_id if necessary
+        if (pad_count := (chunk_len - len(batch))) > 0:
+            batch += [pad_token_id] * pad_count
+        assert len(batch) == chunk_len, "Batch length must be equal to chunk length"
+        chunked_list.append(batch)
 
-    # Chunk tokens by reshaping
-    chunked_tokens = torch.tensor(tokens, dtype=torch.long).reshape(-1, u_chunk_len)
-    n_chunks = chunked_tokens.shape[0]
+    # Convert to tensor
+    chunks = torch.tensor(chunked_list, dtype=torch.long)
+    n_chunks = chunks.shape[0]
 
-    # Concatenate BOS and EOS tokens
-    bos_tensor = torch.full((n_chunks, 1), start_token_id, dtype=torch.long)
-    eos_tensor = torch.full((n_chunks, 1), end_token_id, dtype=torch.long)
-    chunks = torch.cat((bos_tensor, chunked_tokens, eos_tensor), dim=1)
-
-    assert chunks.shape == (n_chunks, chunk_len), "Chunked tokens shape mismatch"
+    # Check chunk properties
+    assert n_chunks == np.ceil(len(tokens) / u_chunk_len)
+    assert set(chunks[:, 0].unique()) == {start_token_id}
+    assert set(chunks[:, -1].unique()) == {end_token_id, pad_token_id}
     return chunks
 
 
