@@ -158,11 +158,9 @@ def init_tokenizer() -> PreTrainedTokenizerFast:
 # ==========================
 
 OBSERVATIONS = """Observations:
-We see that the perplexity for the first and third test cases are lower than the rest.
-This is because atleast one sequence of words in these test cases have appeared in the training data
-while all the sequences in rest of the test cases seem to be relatively unseen.
+The perplexity values for all test cases are > 10000 indicating the model is 'surprised' by the test data since many of the sequences did not appear in the training set.
+We see that the perplexity for the second and fourth test cases are higher than the rest since they contain more out-of-vocabulary sequences / tokens and lower unigram probabilities.
 """
-# TODO: Update observations
 
 # ==========================
 #     Main Function
