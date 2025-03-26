@@ -203,8 +203,8 @@ def main() -> None:
     tokenizer = init_tokenizer()
 
     print("Tokenizing first and last row of training data using GPT2 tokenizer...")
-    first_row = tokenizer.tokenize(data[0][2])
-    last_row = tokenizer.tokenize(data[-1][2])
+    first_row = ["<s>"] + tokenizer.tokenize(data[0][2]) + ["</s>"]
+    last_row = ["<s>"] + tokenizer.tokenize(data[-1][2]) + ["</s>"]
 
     outfile.write(f"first: {first_row}\n")
     outfile.write(f"last: {last_row}\n")
