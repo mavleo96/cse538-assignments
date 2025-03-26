@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from itertools import batched
 from torch.utils.data import TensorDataset, DataLoader
+from torch.distributions import Categorical
 from transformers import PreTrainedTokenizerFast
 from tqdm import tqdm
 from typing import List, Tuple
@@ -32,7 +33,7 @@ class RecurrentLM(nn.Module):
         """Initialize the model"""
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.gru = nn.GRU(embed_dim, rnn_hidden_dim, batch_first=True)
+        self.gru = nn.GRU(embed_dim, rnn_hidden_dim, num_layers=1, batch_first=True)
         self.layer_norm = nn.LayerNorm(rnn_hidden_dim)
         self.classifier = nn.Linear(rnn_hidden_dim, vocab_size)
 
@@ -114,7 +115,7 @@ def generate(
     device: str,
     sample: bool = False,
 ) -> List[int]:
-    """Generate a sequence of tokens from the model"""
+    """Generate a sequence of tokens from the model. If sample is True, sample from the logits, else argmax."""
     # shape should be (b, s) to be compatible with layer norm in the model
     start_tokens = torch.tensor(
         tokenizer.encode(start_phrase), device=device, dtype=torch.long
@@ -123,23 +124,21 @@ def generate(
 
     model.eval()
     with torch.no_grad():
+        # Forward pass through the model
         logits, hidden_state = model(start_tokens)
         if sample:
-            next_token = torch.distributions.Categorical(
-                logits=logits[:, -1:, :]
-            ).sample()
+            next_token = Categorical(logits=logits[:, -1:, :]).sample()
         else:
             next_token = torch.argmax(logits, dim=2)[:, -1:]
         generated_tokens.append(next_token.item())
 
+        # Stepwise forward pass
         while (len(generated_tokens) < max_len) and (
             generated_tokens[-1] not in [tokenizer.eos_token_id, tokenizer.pad_token_id]
         ):
             logits, hidden_state = model.stepwise_forward(next_token, hidden_state)
             if sample:
-                next_token = torch.distributions.Categorical(
-                    logits=logits[:, -1:, :]
-                ).sample()
+                next_token = Categorical(logits=logits[:, -1:, :]).sample()
             else:
                 next_token = torch.argmax(logits, dim=2)[:, -1:]
             generated_tokens.append(next_token.item())
@@ -271,7 +270,7 @@ def main() -> None:
     os.makedirs("results", exist_ok=True)
     outfile = open("results/a2_p2_murugan_116745378_OUTPUT.txt", "w")
 
-    # Preparing the dataset
+    # Prepare the dataset
     outfile.write("Checkpoint 2.1:\n")
 
     # Initialize GPT2 tokenizer
