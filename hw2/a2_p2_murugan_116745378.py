@@ -179,8 +179,8 @@ def chunk_tokens(
 
     # Check chunk properties
     assert n_chunks == np.ceil(len(tokens) / u_chunk_len)
-    assert set(chunks[:, 0].unique()) == {start_token_id}
-    assert set(chunks[:, -1].unique()) == {end_token_id, pad_token_id}
+    assert set(chunks[:, 0].unique().tolist()).issubset({start_token_id})
+    assert set(chunks[:, -1].unique().tolist()).issubset({end_token_id, pad_token_id})
     return chunks
 
 
