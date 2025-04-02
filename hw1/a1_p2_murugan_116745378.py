@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-
-from typing import List, Dict, Tuple
+import os
 from itertools import product
-from sklearn.model_selection import train_test_split
+from typing import Dict, List, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from a1_p1_murugan_116745378 import wordTokenizer
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from tabulate import tabulate
 from torch import nn
 from torch.utils.data import TensorDataset
 from tqdm import tqdm
-from tabulate import tabulate
-from a1_p1_murugan_116745378 import wordTokenizer
 
 np.random.seed(0)
 torch.manual_seed(0)

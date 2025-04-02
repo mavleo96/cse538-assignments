@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
+import os
 import re
-
-from typing import List
-from itertools import pairwise
 from collections import Counter
-from tqdm import tqdm
+from itertools import pairwise
+from typing import List
 
+from tqdm import tqdm
 
 # ==========================
 #     Word Tokenizer

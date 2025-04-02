@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import csv
-import torch
+import os
 import re
-import numpy as np
-import torch.nn as nn
-import matplotlib.pyplot as plt
-
 from itertools import batched
-from torch.utils.data import TensorDataset, DataLoader
-from torch.distributions import Categorical
-from transformers import PreTrainedTokenizerFast
-from tqdm import tqdm
 from typing import List, Tuple
-from a2_p1_murugan_116745378 import init_tokenizer, get_perplexity
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+from a2_p1_murugan_116745378 import get_perplexity, init_tokenizer
+from torch.distributions import Categorical
+from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+from transformers import PreTrainedTokenizerFast
 
 np.random.seed(0)
 torch.manual_seed(0)

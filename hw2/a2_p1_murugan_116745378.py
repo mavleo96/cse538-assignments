@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import csv
+import os
+from collections import defaultdict
+from typing import List, Union
 
 import numpy as np
 from tqdm import tqdm
 from transformers import GPT2TokenizerFast, PreTrainedTokenizerFast
-from typing import List, Union
-from collections import defaultdict
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
