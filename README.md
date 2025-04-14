@@ -5,10 +5,6 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 ## Repository Structure
 ```
 .
-├── .gitignore
-├── README.md
-├── environment_linux.yml
-├── environment_mac.yml
 ├── hw1
 │   ├── README.md
 │   ├── a1_exp_nb.ipynb
@@ -31,7 +27,12 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 │   └── submission
 │       ├── a2_p1_murugan_116745378_OUTPUT.txt
 │       └── a2_p2_murugan_116745378_OUTPUT.pdf
-└── practice/
+├── hw3/
+├── practice/
+├── .gitignore
+├── environment_linux.yml
+├── environment_mac.yml
+└── README.md
 ```
 
 ## Setup Instructions
@@ -54,10 +55,17 @@ conda activate cse538
 ## Assignments
 
 ### Assignment 1: Text Classification and Word Embeddings
-Implementaion of regex and byte pair encoding tokenization techniques and POS tagging models using Twitter data, focusing on text preprocessing and classification tasks.
+Implementation of regex and byte pair encoding tokenization techniques and POS tagging models using Twitter data, focusing on text preprocessing and classification tasks.
 
 ### Assignment 2: Language Models and Text Generation
 Development of N-gram and RNN-based language models for text generation, using song lyrics to compare different modeling approaches.
+
+### Assignment 3: Transformer Models and Fine-tuning
+Implementation and experimentation with transformer-based language models, including:
+- Autoregressive and auto-encoding transformer LMs
+- Attention mechanism modifications
+- Context-based response generation
+- Fine-tuning techniques for various NLP tasks
 
 > Note: Detailed requirements, datasets, and instructions for each assignment can be found in their respective directories (`hwX/README.md`).
 
@@ -70,12 +78,10 @@ The project uses Python 3.12 and includes the following main dependencies:
 - Matplotlib
 - scikit-learn
 - Jupyter Notebook
+- Datasets
+- Sentence Transformers
 
 All dependencies are specified in the environment YAML files.
-
-<!-- ## Results
-
-Assignment results and outputs are stored in the respective `results/` directories within each assignment folder. -->
 
 ## License
 
