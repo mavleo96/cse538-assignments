@@ -38,11 +38,11 @@ def process_data_boolq(
     if subset:
         data = data.select(range(100))
     tensor_list = [boolq2tensor(x, tokenizer, append_answer) for x in data]
-    tensor_data = tensorlist2padded(
+    tensor_data, attention_mask = tensorlist2padded(
         tensor_list, context_length, pad_token_id, pad_strategy
     )
     labels = torch.tensor([1 if x["answer"] else 0 for x in data], dtype=torch.long)
-    dataset = TensorDataset(tensor_data, labels)
+    dataset = TensorDataset(tensor_data, attention_mask, labels)
     return (
         DataLoader(dataset, batch_size=batch_size, shuffle=True),
         labels.cpu().tolist(),
@@ -66,9 +66,9 @@ def model_inference(
     label_pred, logits = [], []
     with torch.no_grad():
         for batch in tqdm(loader, desc=desc):
-            X, _ = batch
-            X = X.to(device)
-            outputs = model(X)
+            X, attn_mask, _ = batch
+            X, attn_mask = X.to(device), attn_mask.to(device)
+            outputs = model(X, attention_mask=attn_mask)
             if "logits" in outputs:
                 outputs = outputs.logits[:, -1, :]
             elif "pooler_output" in outputs:
@@ -112,13 +112,13 @@ def train_model(
         train_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1} [Train]", leave=False)
         for batch in train_bar:
             # Get batch
-            X, y = batch
-            X, y = X.to(device), y.to(device)
+            X, attn_mask, y = batch
+            X, attn_mask, y = X.to(device), attn_mask.to(device), y.to(device)
 
             # Forward pass
             scaler = torch.amp.GradScaler()
             with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                outputs = model(X)
+                outputs = model(X, attention_mask=attn_mask)
                 if "logits" in outputs:
                     outputs = outputs.logits[:, -1, :]
                 elif "pooler_output" in outputs:
@@ -158,12 +158,12 @@ def train_model(
             )
             for batch in val_bar:
                 # Get batch
-                X, y = batch
-                X, y = X.to(device), y.to(device)
+                X, attn_mask, y = batch
+                X, attn_mask, y = X.to(device), attn_mask.to(device), y.to(device)
 
                 # Forward pass
                 with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                    outputs = model(X)
+                    outputs = model(X, attention_mask=attn_mask)
                     if "logits" in outputs:
                         outputs = outputs.logits[:, -1, :]
                     elif "pooler_output" in outputs:
@@ -243,7 +243,8 @@ def tensorlist2padded(
             assert x.shape[1] == length
 
     concat_tensor = torch.cat(tensorlist, dim=0)
-    return concat_tensor
+    attention_mask = torch.where(concat_tensor == pad_token_id, False, True)
+    return concat_tensor, attention_mask
 
 
 def get_metric_str(labels: List[int], label_pred: List[int]) -> str:
