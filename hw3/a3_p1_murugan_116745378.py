@@ -13,8 +13,8 @@ from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score)
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from transformers import (GPT2LMHeadModel, GPT2Tokenizer, RobertaModel,
-                          RobertaTokenizer)
+from transformers import (AutoTokenizer, GPT2LMHeadModel, PreTrainedTokenizer,
+                          RobertaModel)
 
 torch.manual_seed(0)
 
@@ -25,7 +25,7 @@ torch.manual_seed(0)
 
 def process_data_boolq(
     split: str,
-    tokenizer: GPT2Tokenizer,
+    tokenizer: PreTrainedTokenizer,
     pad_token_id: int,
     append_answer: bool,
     context_length: int,
@@ -204,7 +204,7 @@ def train_model(
 
 
 def boolq2tensor(
-    x: Dict[str, Any], tokenizer: GPT2Tokenizer, append_answer: bool = False
+    x: Dict[str, Any], tokenizer: PreTrainedTokenizer, append_answer: bool = False
 ) -> torch.Tensor:
     """Convert BoolQ data to a tensor"""
     text = f"{x['passage']}.\n{x['question']}?\n"
@@ -343,7 +343,7 @@ def main() -> None:
 
     # Initialize tokenizer
     print("Initializing distilgpt2 model and tokenizer...")
-    tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
     no_token_id, yes_token_id = tokenizer.encode("no")[0], tokenizer.encode("yes")[0]
     model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(device)
 
@@ -403,7 +403,7 @@ def main() -> None:
 
     outfile.write("Checkpoint 1.4:\n")
     print("Loading BoolQ training dataset...")
-    tokenizer = RobertaTokenizer.from_pretrained("distilroberta-base")
+    tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
     train_loader, _ = process_data_boolq(
         "train", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
     )
