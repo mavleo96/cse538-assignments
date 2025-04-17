@@ -28,9 +28,12 @@ def process_data_boolq(
     context_length: int,
     batch_size: int,
     pad_strategy: str,
+    subset: bool = False,
 ) -> Tuple[DataLoader, List[int]]:
     """Process BoolQ data and return a dataloader and labels"""
     data = load_dataset("google/boolq")[split]
+    if subset:
+        data = data.select(range(100))
     tensor_list = [boolq2tensor(x, tokenizer, append_answer) for x in data]
     tensor_data = tensorlist2padded(
         tensor_list, context_length, pad_token_id, pad_strategy
@@ -281,10 +284,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 1"
     )
-    parser.add_argument("--batch_size", type=int, default=48)
+    parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=1e-5)
-    parser.add_argument("--weight_decay", type=float, default=1e-3)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
     parser.add_argument("--context_length", type=int, default=256)
     parser.add_argument("--save_model", action="store_true", default=False)
     parser.add_argument("--save_dir", type=str, default="results")
@@ -295,10 +298,12 @@ def main() -> None:
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
+    print(f"Using device: {device}")
     dataloader_args = {
         "context_length": args.context_length,
         "batch_size": args.batch_size,
         "pad_strategy": "left",
+        "subset": True,
     }
     optimizer_args = {
         "lr": args.lr,
@@ -308,8 +313,6 @@ def main() -> None:
         "epochs": args.epochs,
         "save_model": args.save_model,
     }
-
-    print(f"Using device: {device}")
 
     # Create and open output file
     print("Creating output file...")
