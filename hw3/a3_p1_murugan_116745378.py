@@ -13,7 +13,10 @@ from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score)
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, GPT2Tokenizer, RobertaTokenizer
+from transformers import (GPT2LMHeadModel, GPT2Tokenizer, RobertaModel,
+                          RobertaTokenizer)
+
+torch.manual_seed(0)
 
 # ==========================
 #     Data Functions
@@ -65,7 +68,13 @@ def model_inference(
         for batch in tqdm(loader, desc=desc):
             X, _ = batch
             X = X.to(device)
-            outputs = model(X).logits[:, -1, :]
+            outputs = model(X)
+            if "logits" in outputs:
+                outputs = outputs.logits[:, -1, :]
+            elif "pooler_output" in outputs:
+                outputs = outputs.pooler_output
+            else:
+                raise ValueError(f"Unknown output type: {outputs.keys()}")
             if indices is not None:
                 # Indices are used to select the logits for the correct tokens i.e [no, yes]
                 outputs = outputs[:, indices]
@@ -109,11 +118,17 @@ def train_model(
             # Forward pass
             scaler = torch.amp.GradScaler()
             with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                logits = model(X).logits[:, -1, :]
-                if isinstance(loss_fn, nn.BCEWithLogitsLoss):
-                    loss = loss_fn(logits, y.float().reshape(-1, 1))
+                outputs = model(X)
+                if "logits" in outputs:
+                    outputs = outputs.logits[:, -1, :]
+                elif "pooler_output" in outputs:
+                    outputs = outputs.pooler_output
                 else:
-                    loss = loss_fn(logits, y.long())
+                    raise ValueError(f"Unknown output type: {outputs.keys()}")
+                if isinstance(loss_fn, nn.BCEWithLogitsLoss):
+                    loss = loss_fn(outputs, y.float().reshape(-1, 1))
+                else:
+                    loss = loss_fn(outputs, y.long())
 
             # Backward pass
             optimizer.zero_grad()
@@ -123,10 +138,10 @@ def train_model(
 
             # Update metrics
             running_loss += loss.item() * X.size(0)
-            if logits.shape[-1] == 1:
-                preds = torch.where(F.sigmoid(logits.reshape(-1)) > 0.5, 1, 0)
+            if outputs.shape[-1] == 1:
+                preds = torch.where(F.sigmoid(outputs.reshape(-1)) > 0.5, 1, 0)
             else:
-                preds = logits.argmax(dim=-1)
+                preds = outputs.argmax(dim=-1)
             running_correct += (preds == y).sum().item()
             running_total += X.size(0)
             train_bar.set_postfix(loss=loss.item(), acc=running_correct / running_total)
@@ -148,17 +163,23 @@ def train_model(
 
                 # Forward pass
                 with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                    logits = model(X).logits[:, -1, :]
-                    if isinstance(loss_fn, nn.BCEWithLogitsLoss):
-                        loss = loss_fn(logits, y.float().reshape(-1, 1))
+                    outputs = model(X)
+                    if "logits" in outputs:
+                        outputs = outputs.logits[:, -1, :]
+                    elif "pooler_output" in outputs:
+                        outputs = outputs.pooler_output
                     else:
-                        loss = loss_fn(logits, y.long())
+                        raise ValueError(f"Unknown output type: {outputs.keys()}")
+                    if isinstance(loss_fn, nn.BCEWithLogitsLoss):
+                        loss = loss_fn(outputs, y.float().reshape(-1, 1))
+                    else:
+                        loss = loss_fn(outputs, y.long())
 
                 # Update metrics
-                if logits.shape[-1] == 1:
-                    preds = torch.where(F.sigmoid(logits.reshape(-1)) > 0.5, 1, 0)
+                if outputs.shape[-1] == 1:
+                    preds = torch.where(F.sigmoid(outputs.reshape(-1)) > 0.5, 1, 0)
                 else:
-                    preds = logits.argmax(dim=-1)
+                    preds = outputs.argmax(dim=-1)
                 running_loss += loss.item() * X.size(0)
                 running_correct += (preds == y).sum().item()
                 running_total += X.size(0)
@@ -323,7 +344,7 @@ def main() -> None:
     print("Initializing distilgpt2 model and tokenizer...")
     tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
     no_token_id, yes_token_id = tokenizer.encode("no")[0], tokenizer.encode("yes")[0]
-    model = AutoModelForCausalLM.from_pretrained("distilgpt2").to(device)
+    model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(device)
 
     # Load datasets
     print("Loading BoolQ validation dataset...")
@@ -349,6 +370,7 @@ def main() -> None:
     print("Finetuning distilgpt2 on BoolQ...")
     optimizer = torch.optim.AdamW(model.parameters(), **optimizer_args)
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.unk_token_id)
+    # TODO: model overfits to training data, need to train over full sequence
     losses = train_model(
         model,
         train_loader,
@@ -386,16 +408,17 @@ def main() -> None:
     )
 
     print("Loading DistilRoBERTa model...")
-    model = AutoModelForCausalLM.from_pretrained("distilroberta-base", is_decoder=True)
-    # TODO: autocast not compatible
-    model.lm_head = nn.Sequential(
-        nn.Linear(model.lm_head.dense.in_features, 1)  # , nn.Sigmoid()
-    )
+    # TODO: Check if LMHead should be used instead of pooler
+    model = RobertaModel.from_pretrained("distilroberta-base")
+    model.pooler.dense = nn.Linear(model.pooler.dense.in_features, 1)
+    # TODO: autocast not compatible with BCE loss
+    model.pooler.activation = nn.Identity()
     model = model.to(device)
-    # TODO: only optimize lm_head?
-    optimizer = torch.optim.AdamW(model.lm_head.parameters(), **optimizer_args)
+    # TODO: only optimize pooler?
+    optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
     # TODO: torch.nn.BCELoss is unsafe to autocast
     loss_fn = nn.BCEWithLogitsLoss()
+    # TODO: model seems to be predicting either 0 or 1 for all examples
     losses = train_model(
         model,
         train_loader,
