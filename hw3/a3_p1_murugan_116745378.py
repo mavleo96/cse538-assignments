@@ -324,7 +324,6 @@ def main() -> None:
     dataloader_args = {
         "context_length": args.context_length,
         "batch_size": args.batch_size,
-        "pad_strategy": "left",
         "subset": args.use_subset,
     }
     optimizer_args = {
@@ -350,7 +349,12 @@ def main() -> None:
     # Load datasets
     print("Loading BoolQ validation dataset...")
     val_loader, val_labels = process_data_boolq(
-        "validation", tokenizer, tokenizer.unk_token_id, False, **dataloader_args
+        "validation",
+        tokenizer,
+        tokenizer.unk_token_id,
+        False,
+        pad_strategy="left",
+        **dataloader_args,
     )
 
     # Zero-shot accuracy of distilgpt2 on BoolQ
@@ -365,7 +369,12 @@ def main() -> None:
     outfile.write("Checkpoint 1.2:\n")
     print("Loading BoolQ training dataset...")
     train_loader, _ = process_data_boolq(
-        "train", tokenizer, tokenizer.unk_token_id, True, **dataloader_args
+        "train",
+        tokenizer,
+        tokenizer.unk_token_id,
+        True,
+        pad_strategy="left",
+        **dataloader_args,
     )
 
     print("Finetuning distilgpt2 on BoolQ...")
@@ -405,7 +414,20 @@ def main() -> None:
     print("Loading BoolQ training dataset...")
     tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
     train_loader, _ = process_data_boolq(
-        "train", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
+        "train",
+        tokenizer,
+        tokenizer.pad_token_id,
+        False,
+        pad_strategy="right",
+        **dataloader_args,
+    )
+    val_loader, val_labels = process_data_boolq(
+        "validation",
+        tokenizer,
+        tokenizer.pad_token_id,
+        False,
+        pad_strategy="right",
+        **dataloader_args,
     )
 
     print("Loading DistilRoBERTa model...")
