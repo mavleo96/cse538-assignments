@@ -1,10 +1,17 @@
 #! /usr/bin/env python3
 
 import argparse
+import os
 
 import torch
 import torch.nn as nn
+from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoTokenizer, RobertaModel
+
+from a3_p1_murugan_116745378 import (model_inference, plot_loss_and_accuracy,
+                                     process_data_boolq, train_model)
+
+torch.manual_seed(0)
 
 # ==========================
 #   Model Initialization
@@ -98,6 +105,20 @@ def get_distilroberta_nores() -> nn.Module:
 
 
 # ==========================
+#     Helper Functions
+# ==========================
+
+
+def get_boolq_validation_metric_str(metric_dict: dict) -> str:
+    return f"""boolq validation set:
+ distilRB-rand: overall acc: {metric_dict["rand"]["accuracy"]:.3f}, f1: {metric_dict["rand"]["f1"]:.3f}
+ distilroberta: overall acc: {metric_dict["base"]["accuracy"]:.3f}, f1: {metric_dict["base"]["f1"]:.3f}
+  distilRB-KQV: overall acc: {metric_dict["kqv"]["accuracy"]:.3f}, f1: {metric_dict["kqv"]["f1"]:.3f}
+distilRB-nores: overall acc: {metric_dict["nores"]["accuracy"]:.3f}, f1: {metric_dict["nores"]["f1"]:.3f}
+"""
+
+
+# ==========================
 #     Main Function
 # ==========================
 
@@ -107,7 +128,93 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 2"
     )
+    parser.add_argument("--batch_size", type=int, default=48)
+    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
+    parser.add_argument("--context_length", type=int, default=256)
+    parser.add_argument("--save_model", action="store_true", default=False)
+    parser.add_argument("--save_dir", type=str, default="results")
+    parser.add_argument("--file_prefix", type=str, default="a3_p2_murugan_116745378")
     args = parser.parse_args()
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
+    print(f"Using device: {device}")
+    dataloader_args = {
+        "context_length": args.context_length,
+        "batch_size": args.batch_size,
+        "pad_strategy": "right",
+        "subset": True,
+    }
+    optimizer_args = {"lr": args.lr, "weight_decay": args.weight_decay}
+    trainer_args = {
+        "epochs": args.epochs,
+        "save_model": args.save_model,
+    }
+
+    # Create and open output file
+    print("Creating output file...")
+    os.makedirs(args.save_dir, exist_ok=True)
+    outfile = open(f"{args.save_dir}/{args.file_prefix}_OUTPUT.txt", "w")
+
+    # Load data
+    outfile.write("Checkpoint 2.2:\n")
+    tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
+    train_loader, _ = process_data_boolq(
+        "train", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
+    )
+    val_loader, val_labels = process_data_boolq(
+        "validation", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
+    )
+
+    model_func_map = {
+        "rand": get_distilroberta_rand,
+        "base": get_distilroberta,
+        "kqv": get_distilroberta_kqv,
+        "nores": get_distilroberta_nores,
+    }
+
+    metric_dict = {}
+    for model_name in ["rand", "base", "kqv", "nores"]:
+        model = model_func_map[model_name]()
+        # TODO: autocast seems to be incompatible with BCELoss
+        model.pooler.dense = nn.Linear(model.config.hidden_size, 1)
+        model.pooler.activation = nn.Identity()
+        model.to(device)
+
+        # Define loss function and optimizer
+        if model_name != "rand":
+            loss_fn = nn.BCEWithLogitsLoss()
+            optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
+
+            losses = train_model(
+                model,
+                train_loader,
+                val_loader,
+                loss_fn,
+                optimizer,
+                device,
+                **trainer_args,
+            )
+            plot_loss_and_accuracy(
+                *losses,
+                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}.png",
+            )
+        label_pred, _ = model_inference(
+            model, val_loader, None, device, f"Finetuned DistilRoBERTa {model_name}"
+        )
+        metric_dict[model_name] = {
+            "accuracy": accuracy_score(val_labels, label_pred),
+            "f1": f1_score(val_labels, label_pred, average="macro"),
+        }
+    outfile.write(get_boolq_validation_metric_str(metric_dict) + "\n\n")
+
+    # Close output file
+    print("Closing output file...")
+    outfile.close()
 
     return None
 
