@@ -4,15 +4,21 @@ import argparse
 
 import torch
 import torch.nn as nn
-from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer, RobertaModel
 
 # ==========================
 #   Model Initialization
 # ==========================
 
 
+def get_distilroberta() -> nn.Module:
+    # TODO: Check if model with LM head should be used for this task
+    model = RobertaModel.from_pretrained("distilroberta-base")
+    return model
+
+
 def get_distilroberta_rand() -> nn.Module:
-    model = AutoModelForCausalLM.from_pretrained("distilroberta-base", is_decoder=True)
+    model = RobertaModel.from_pretrained("distilroberta-base")
     for name, module in model.named_modules():
         # TODO: check if this is correct or this is to be done for all layers
         if "roberta.encoder.layer.4" in name or "roberta.encoder.layer.5" in name:
@@ -26,7 +32,7 @@ def get_distilroberta_rand() -> nn.Module:
 
 
 def get_distilroberta_kqv() -> nn.Module:
-    model = AutoModelForCausalLM.from_pretrained("distilroberta-base", is_decoder=True)
+    model = RobertaModel.from_pretrained("distilroberta-base")
     for name, module in model.named_modules():
         if name in {"roberta.encoder.layer.4", "roberta.encoder.layer.5"}:
             w = (
@@ -43,7 +49,6 @@ def get_distilroberta_kqv() -> nn.Module:
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class RobertaOutputNoRes(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -56,7 +61,7 @@ class RobertaOutputNoRes(nn.Module):
     ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)  # Removed residual connection
         return hidden_states
 
 
@@ -72,12 +77,12 @@ class RobertaSelfOutputNoRes(nn.Module):
     ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)  # Removed residual connection
         return hidden_states
 
 
 def get_distilroberta_nores() -> nn.Module:
-    model = AutoModelForCausalLM.from_pretrained("distilroberta-base", is_decoder=True)
+    model = RobertaModel.from_pretrained("distilroberta-base", is_decoder=True)
 
     for name, module in model.named_modules():
         if name in {"roberta.encoder.layer.4", "roberta.encoder.layer.5"}:
