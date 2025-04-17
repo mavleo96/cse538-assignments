@@ -136,6 +136,7 @@ def main() -> None:
     parser.add_argument("--save_model", action="store_true", default=False)
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p2_murugan_116745378")
+    parser.add_argument("--use_subset", action="store_true", default=False)
     args = parser.parse_args()
     device = (
         "cuda"
@@ -147,7 +148,7 @@ def main() -> None:
         "context_length": args.context_length,
         "batch_size": args.batch_size,
         "pad_strategy": "right",
-        "subset": True,
+        "subset": args.use_subset,
     }
     optimizer_args = {"lr": args.lr, "weight_decay": args.weight_decay}
     trainer_args = {
