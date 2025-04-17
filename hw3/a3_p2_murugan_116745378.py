@@ -2,16 +2,50 @@
 
 import argparse
 import os
+from typing import Any, Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score
-from transformers import AutoTokenizer, RobertaModel
+from datasets import load_dataset
+from scipy.stats import pearsonr
+from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error
+from torch.utils.data import DataLoader, TensorDataset
+from transformers import AutoTokenizer, PreTrainedTokenizer, RobertaModel
 
 from a3_p1_murugan_116745378 import (model_inference, plot_loss_and_accuracy,
-                                     process_data_boolq, train_model)
+                                     process_data_boolq, tensorlist2padded,
+                                     train_model)
 
 torch.manual_seed(0)
+
+# ==========================
+#     Data Functions
+# ==========================
+
+
+def process_data_sst(
+    split: str,
+    tokenizer: PreTrainedTokenizer,
+    pad_token_id: int,
+    context_length: int,
+    batch_size: int,
+    pad_strategy: str,
+    subset: bool = False,
+) -> Tuple[DataLoader, List[int]]:
+    data = load_dataset("stanfordnlp/sst")[split]
+    if subset:
+        data = data.select(range(100))
+    tensor_list = [sst2tensor(x, tokenizer) for x in data]
+    tensor_data, attention_mask = tensorlist2padded(
+        tensor_list, context_length, pad_token_id, pad_strategy
+    )
+    values = torch.tensor([x["label"] for x in data], dtype=torch.float32)
+    dataset = TensorDataset(tensor_data, attention_mask, values)
+    return (
+        DataLoader(dataset, batch_size=batch_size, shuffle=True),
+        values.cpu().tolist(),
+    )
+
 
 # ==========================
 #   Model Initialization
@@ -109,13 +143,26 @@ def get_distilroberta_nores() -> nn.Module:
 # ==========================
 
 
+def sst2tensor(x: Dict[str, Any], tokenizer: PreTrainedTokenizer) -> torch.Tensor:
+    return tokenizer.encode(x["sentence"], return_tensors="pt")
+
+
 def get_boolq_validation_metric_str(metric_dict: dict) -> str:
     return f"""boolq validation set:
  distilRB-rand: overall acc: {metric_dict["rand"]["accuracy"]:.3f}, f1: {metric_dict["rand"]["f1"]:.3f}
  distilroberta: overall acc: {metric_dict["base"]["accuracy"]:.3f}, f1: {metric_dict["base"]["f1"]:.3f}
   distilRB-KQV: overall acc: {metric_dict["kqv"]["accuracy"]:.3f}, f1: {metric_dict["kqv"]["f1"]:.3f}
-distilRB-nores: overall acc: {metric_dict["nores"]["accuracy"]:.3f}, f1: {metric_dict["nores"]["f1"]:.3f}
-"""
+distilRB-nores: overall acc: {metric_dict["nores"]["accuracy"]:.3f}, f1: {metric_dict["nores"]["f1"]:.3f}"""
+
+
+def get_sst_metric_str(metric_dict: dict) -> str:
+    return f"""Validation: mae: {metric_dict["base"]["mae_val"]:.3f}, r: {metric_dict["base"]["pearson_val"]:.3f}
+      Test: mae: {metric_dict["base"]["mae"]:.3f}, r: {metric_dict["base"]["pearson"]:.3f}
+
+SST test set:
+ distilRB-rand: mae: {metric_dict["rand"]["mae"]:.3f}, r: {metric_dict["rand"]["pearson"]:.3f}
+  distilRB-KQV: mae: {metric_dict["kqv"]["mae"]:.3f}, r: {metric_dict["kqv"]["pearson"]:.3f}
+distilRB-nores: mae: {metric_dict["nores"]["mae"]:.3f}, r: {metric_dict["nores"]["pearson"]:.3f}"""
 
 
 # ==========================
@@ -161,6 +208,14 @@ def main() -> None:
     os.makedirs(args.save_dir, exist_ok=True)
     outfile = open(f"{args.save_dir}/{args.file_prefix}_OUTPUT.txt", "w")
 
+    print("Creating model function map...")
+    model_func_map = {
+        "rand": get_distilroberta_rand,
+        "base": get_distilroberta,
+        "kqv": get_distilroberta_kqv,
+        "nores": get_distilroberta_nores,
+    }
+
     # Load data
     outfile.write("Checkpoint 2.2:\n")
     tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
@@ -170,13 +225,6 @@ def main() -> None:
     val_loader, val_labels = process_data_boolq(
         "validation", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
     )
-
-    model_func_map = {
-        "rand": get_distilroberta_rand,
-        "base": get_distilroberta,
-        "kqv": get_distilroberta_kqv,
-        "nores": get_distilroberta_nores,
-    }
 
     metric_dict = {}
     for model_name in ["rand", "base", "kqv", "nores"]:
@@ -202,7 +250,7 @@ def main() -> None:
             )
             plot_loss_and_accuracy(
                 *losses,
-                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}.png",
+                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}_classification.png",
             )
         label_pred = model_inference(
             model, val_loader, None, device, f"Finetuned DistilRoBERTa {model_name}"
@@ -212,6 +260,67 @@ def main() -> None:
             "f1": f1_score(val_labels, label_pred, average="macro"),
         }
     outfile.write(get_boolq_validation_metric_str(metric_dict) + "\n\n")
+
+    outfile.write("Checkpoint 2.3:\n")
+    train_loader, _ = process_data_sst(
+        "train", tokenizer, tokenizer.pad_token_id, **dataloader_args
+    )
+    val_loader, val_values = process_data_sst(
+        "validation", tokenizer, tokenizer.pad_token_id, **dataloader_args
+    )
+    test_loader, test_values = process_data_sst(
+        "test", tokenizer, tokenizer.pad_token_id, **dataloader_args
+    )
+    metric_dict = {}
+    for model_name in ["rand", "base", "kqv", "nores"]:
+        model = model_func_map[model_name]()
+        model.pooler.dense = nn.Linear(model.config.hidden_size, 1)
+        model.pooler.activation = nn.Sigmoid()
+        model.to(device)
+
+        if model_name != "rand":
+            loss_fn = nn.MSELoss()
+            optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
+
+            losses = train_model(
+                model,
+                train_loader,
+                val_loader,
+                loss_fn,
+                optimizer,
+                device,
+                **trainer_args,
+            )
+            plot_loss_and_accuracy(
+                *losses,
+                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}_regression.png",
+            )
+
+        output = model_inference(
+            model,
+            test_loader,
+            None,
+            device,
+            f"Finetuned DistilRoBERTa {model_name}",
+            regression=True,
+        )
+        metric_dict[model_name] = {
+            "mae": mean_absolute_error(test_values, output),
+            "pearson": pearsonr(test_values, output)[0],
+        }
+        if model_name == "base":
+            output = model_inference(
+                model,
+                val_loader,
+                None,
+                device,
+                f"Finetuned DistilRoBERTa {model_name}",
+                regression=True,
+            )
+            metric_dict[model_name]["mae_val"] = mean_absolute_error(val_values, output)
+            metric_dict[model_name]["pearson_val"] = pearsonr(val_values, output)[0]
+
+    outfile.write(get_sst_metric_str(metric_dict) + "\n")
 
     # Close output file
     print("Closing output file...")
