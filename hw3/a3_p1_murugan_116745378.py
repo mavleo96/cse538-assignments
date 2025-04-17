@@ -5,6 +5,7 @@ import os
 from typing import Any, Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -60,10 +61,11 @@ def model_inference(
     indices: Union[List[int], None],
     device: torch.device,
     desc: str = "Validation",
-) -> Tuple[List[int], List[torch.Tensor]]:
-    """Run inference on a model and return predictions and logits"""
+    regression: bool = False,
+) -> List[int]:
+    """Run inference on a model"""
     model.eval()
-    label_pred, logits = [], []
+    preds = []
     with torch.no_grad():
         for batch in tqdm(loader, desc=desc):
             X, attn_mask, _ = batch
@@ -78,15 +80,21 @@ def model_inference(
             if indices is not None:
                 # Indices are used to select the logits for the correct tokens i.e [no, yes]
                 outputs = outputs[:, indices]
-            if outputs.shape[-1] == 1:
-                # If the model is a binary classifier, use a sigmoid function to get the probability of the positive class
-                preds = torch.where(F.sigmoid(outputs.reshape(-1)) > 0.5, 1, 0)
-            else:
-                # If the model is a multi-class classifier, use the argmax function to get the predicted class
-                preds = outputs.argmax(dim=-1)
-            label_pred.extend(preds.cpu().tolist())
-            logits.extend(outputs.cpu().tolist())
-    return label_pred, logits
+            preds.extend(outputs.cpu().tolist())
+
+    preds = np.array(preds)
+    if regression:
+        assert preds.shape[-1] == 1
+        preds = preds[:, 0]
+    else:
+        if preds.shape[-1] == 1:
+            # If the model is a binary classifier, use a sigmoid function to get the probability of the positive class
+            preds = 1 / (1 + np.exp(-preds[:, 0]))
+            preds = np.where(preds > 0.5, 1, 0)
+        else:
+            # If the model is a multi-class classifier, use the argmax function to get the predicted class
+            preds = np.argmax(preds, axis=-1)
+    return preds.tolist()
 
 
 def train_model(
@@ -108,7 +116,7 @@ def train_model(
     progress_bar = tqdm(range(epochs), desc="Training", leave=True)
     for epoch in progress_bar:
         model.train()
-        running_loss, running_correct, running_total = 0.0, 0, 0
+        running_loss, running_total = 0.0, 0
         train_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1} [Train]", leave=False)
         for batch in train_bar:
             # Get batch
@@ -125,10 +133,12 @@ def train_model(
                     outputs = outputs.pooler_output
                 else:
                     raise ValueError(f"Unknown output type: {outputs.keys()}")
-                if isinstance(loss_fn, nn.BCEWithLogitsLoss):
+                if isinstance(loss_fn, (nn.BCEWithLogitsLoss, nn.MSELoss)):
                     loss = loss_fn(outputs, y.float().reshape(-1, 1))
-                else:
+                elif isinstance(loss_fn, nn.CrossEntropyLoss):
                     loss = loss_fn(outputs, y.long())
+                else:
+                    raise ValueError(f"Unknown loss function: {loss_fn}")
 
             # Backward pass
             optimizer.zero_grad()
@@ -136,22 +146,17 @@ def train_model(
             scaler.step(optimizer)
             scaler.update()
 
+            # TODO: add accuracy / mae score
             # Update metrics
             running_loss += loss.item() * X.size(0)
-            if outputs.shape[-1] == 1:
-                preds = torch.where(F.sigmoid(outputs.reshape(-1)) > 0.5, 1, 0)
-            else:
-                preds = outputs.argmax(dim=-1)
-            running_correct += (preds == y).sum().item()
             running_total += X.size(0)
-            train_bar.set_postfix(loss=loss.item(), acc=running_correct / running_total)
+            train_bar.set_postfix(loss=loss.item())
 
         train_losses.append(running_loss / running_total)
-        train_accuracies.append(running_correct / running_total)
 
         # Validation loop
         model.eval()
-        running_loss, running_correct, running_total = 0.0, 0, 0
+        running_loss, running_total = 0.0, 0
         with torch.no_grad():
             val_bar = tqdm(
                 val_loader, desc=f"Epoch {epoch + 1} [Validation]", leave=False
@@ -170,24 +175,18 @@ def train_model(
                         outputs = outputs.pooler_output
                     else:
                         raise ValueError(f"Unknown output type: {outputs.keys()}")
-                    if isinstance(loss_fn, nn.BCEWithLogitsLoss):
+                    if isinstance(loss_fn, (nn.BCEWithLogitsLoss, nn.MSELoss)):
                         loss = loss_fn(outputs, y.float().reshape(-1, 1))
-                    else:
+                    elif isinstance(loss_fn, nn.CrossEntropyLoss):
                         loss = loss_fn(outputs, y.long())
+                    else:
+                        raise ValueError(f"Unknown loss function: {loss_fn}")
 
                 # Update metrics
-                if outputs.shape[-1] == 1:
-                    preds = torch.where(F.sigmoid(outputs.reshape(-1)) > 0.5, 1, 0)
-                else:
-                    preds = outputs.argmax(dim=-1)
                 running_loss += loss.item() * X.size(0)
-                running_correct += (preds == y).sum().item()
                 running_total += X.size(0)
-                val_bar.set_postfix(
-                    loss=loss.item(), acc=running_correct / running_total
-                )
+                val_bar.set_postfix(loss=loss.item())
         dev_losses.append(running_loss / running_total)
-        dev_accuracies.append(running_correct / running_total)
 
     progress_bar.close()
 
@@ -356,7 +355,7 @@ def main() -> None:
     # Zero-shot accuracy of distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.1:\n")
     print("Evaluating Zero-shot accuracy of distilgpt2 on BoolQ...")
-    label_pred, _ = model_inference(
+    label_pred = model_inference(
         model, val_loader, [no_token_id, yes_token_id], device, "Zero-shot DistilGPT2"
     )
     outfile.write(get_metric_str(val_labels, label_pred) + "\n\n")
@@ -392,7 +391,7 @@ def main() -> None:
     # Zero-shot accuracy of finetuned distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.3:\n")
     print("Evaluating Zero-shot accuracy of finetuned distilgpt2 on BoolQ...")
-    label_pred, _ = model_inference(
+    label_pred = model_inference(
         model,
         val_loader,
         [no_token_id, yes_token_id],
@@ -436,14 +435,14 @@ def main() -> None:
     outfile.write(
         f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta.png\n\n"
     )
-    label_pred, _ = model_inference(
+    label_pred = model_inference(
         model,
         val_loader,
         None,
         device,
         "Finetuned DistilRoBERTa",
     )
-    outfile.write(get_metric_str(val_labels, label_pred) + "\n\n")
+    outfile.write(get_metric_str(val_labels, label_pred) + "\n")
 
     # Close output file
     print("Closing output file...")

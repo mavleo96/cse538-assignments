@@ -203,7 +203,7 @@ def main() -> None:
                 *losses,
                 f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}.png",
             )
-        label_pred, _ = model_inference(
+        label_pred = model_inference(
             model, val_loader, None, device, f"Finetuned DistilRoBERTa {model_name}"
         )
         metric_dict[model_name] = {
