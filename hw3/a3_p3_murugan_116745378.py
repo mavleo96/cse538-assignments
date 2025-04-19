@@ -47,6 +47,7 @@ def get_unique_ctx_examples(squad, n=500):
 def retrieve(contexts, embeddings, query):
     """Retrieves the context with the highest cosine similarity to the query"""
 
+    # sentence_model is global variable as function signature does not include it
     query_embedding = sentence_model.encode(query).reshape(1, -1)
     similarities = cosine_similarity(embeddings, query_embedding)
     idx = similarities.argmax()
@@ -55,20 +56,36 @@ def retrieve(contexts, embeddings, query):
     return idx, ret_context
 
 
+SYSTEM_PROMPT = """
+You are a helpful AI assistant.
+Provide one Answer ONLY to the following query based on the context provided below.
+Do not generate or answer any other questions.
+Do not make up or infer any information that is not directly stated in the context.
+Provide an answer that is precise and concise in one word or as few words as possible.
+If you cannot find the answer in the context, return "NA".
+
+Context:
+{ret_context}
+"""
+
+QUERY_PROMPT = """
+Query:
+{query}
+"""
+
+
 def generate_response(model, query, ret_context):
     """Generates a response to the query using the retrieved context"""
 
     messages = [
         {
             "role": "system",
-            "content": "You are a helpful AI assistant. "
-            "Provide one Answer ONLY to the following query based on the context provided below. "
-            "Do not generate or answer any other questions. "
-            "Do not make up or infer any information that is not directly stated in the context. "
-            "Provide an answer that is precise and concise in one word or as few words as possible."
-            f"\nContext: {ret_context}",
+            "content": SYSTEM_PROMPT.format(ret_context=ret_context),
         },
-        {"role": "user", "content": query},
+        {
+            "role": "user",
+            "content": QUERY_PROMPT.format(query=query),
+        },
     ]
 
     generation_args = {
@@ -92,7 +109,7 @@ def main() -> None:
         description="script to run cse538 assignment 3 part 3"
     )
     parser.add_argument(
-        "--model_id", type=str, default="microsoft/Phi-3-mini-4k-instruct"
+        "--model_id", type=str, default="meta-llama/Llama-3.2-3B-Instruct"
     )
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p3_murugan_116745378")
@@ -103,6 +120,13 @@ def main() -> None:
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     print(f"Using device: {device}")
+    if args.model_id in {
+        "microsoft/Phi-3-mini-4k-instruct",
+        "meta-llama/Llama-3.2-3B-Instruct",
+    }:
+        print(f"Using model: {args.model_id}")
+    else:
+        raise ValueError(f"Unknown model: {args.model_id}")
 
     # Create and open output file
     print("Creating output file...")
@@ -123,14 +147,15 @@ def main() -> None:
     print("Retrieving context...")
     outfile.write("Checkpoint 3.1:\n")
     correct_retrieval_ids, incorrect_retrieval_ids = [], []
-    for i, query in tqdm(
+    for qid, query in tqdm(
         enumerate(queries), desc="Retrieving context", total=len(queries)
     ):
-        idx, context = retrieve(contexts, context_embeddings, query)
-        if idx == i:
-            correct_retrieval_ids.append((i, context))
+        cid, _ = retrieve(contexts, context_embeddings, query)
+        # Saving query and retrieved context ids for downstream use
+        if cid == qid:
+            correct_retrieval_ids.append((qid, cid))
         else:
-            incorrect_retrieval_ids.append((i, context))
+            incorrect_retrieval_ids.append((qid, cid))
 
     outfile.write(
         f"Retrieval accuracy: {len(correct_retrieval_ids)}/{len(queries)} = {len(correct_retrieval_ids) / len(queries)}\n\n"
@@ -140,25 +165,24 @@ def main() -> None:
     pipe = pipeline(
         "text-generation",
         model=args.model_id,
-        tokenizer=args.model_id,
         device=device,
         torch_dtype=torch.bfloat16,
     )
 
     print("Generating responses...")
     outfile.write("Checkpoint 3.2:\n")
+    # Randomly sample 5 correct and 5 incorrect retrievals
     correct_ids = random.sample(correct_retrieval_ids, 5)
     incorrect_ids = random.sample(incorrect_retrieval_ids, 5)
     outputs = []
-    for id, context in tqdm(correct_ids + incorrect_ids, desc="Generating responses"):
-        response = generate_response(pipe, queries[id], context)
-        context_type = "right" if id in [i for i, _ in correct_ids] else "wrong"
-        row = [id, context_type, response[0]["generated_text"], answers[id]["text"][0]]
+    for qid, cid in tqdm(correct_ids + incorrect_ids, desc="Generating responses"):
+        response = generate_response(pipe, queries[qid], contexts[cid])
+        row = [qid, cid, response[0]["generated_text"], answers[qid]["text"][0]]
         outputs.append(row)
     outfile.write(
         tabulate(
             outputs,
-            headers=["id", "context_type", "generated", "actual"],
+            headers=["query_id", "context_id", "generated", "actual"],
             tablefmt="pretty",
         )
     )
