@@ -14,8 +14,7 @@ from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score)
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from transformers import (AutoTokenizer, GPT2LMHeadModel, PreTrainedTokenizer,
-                          RobertaModel)
+from transformers import AutoTokenizer, GPT2LMHeadModel, RobertaModel
 
 torch.manual_seed(0)
 
@@ -24,30 +23,74 @@ torch.manual_seed(0)
 # ==========================
 
 
-def process_data_boolq(
-    split: str,
-    tokenizer: PreTrainedTokenizer,
-    pad_token_id: int,
-    append_answer: bool,
-    context_length: int,
-    batch_size: int,
-    pad_strategy: str,
-    subset: bool = False,
-) -> Tuple[DataLoader, List[int]]:
-    """Process BoolQ data and return a dataloader and labels"""
-    data = load_dataset("google/boolq")[split]
+# This function is also used in a1_p2_murugan_116745378.py
+def process_boolq(
+    split: str, append_answer: bool = False, subset: bool = False
+) -> Tuple[List[str], List[int]]:
+    """Process the BoolQ dataset"""
+    boolq_dataset = load_dataset("google/boolq")
+    data = boolq_dataset[split]
     if subset:
         data = data.select(range(100))
-    tensor_list = [boolq2tensor(x, tokenizer, append_answer) for x in data]
-    tensor_data, attention_mask = tensorlist2padded(
-        tensor_list, context_length, pad_token_id, pad_strategy
+    if append_answer:
+        li = [
+            f"{x['passage']}.\n{x['question']}?\n{'yes' if x['answer'] else 'no'}"
+            for x in data
+        ]
+    else:
+        li = [f"{x['passage']}.\n{x['question']}?\n" for x in data]
+    labels = [1 if x["answer"] else 0 for x in data]
+    return li, labels
+
+
+# This function is also used in a1_p2_murugan_116745378.py
+def get_dataloader(
+    data: List[str],
+    labels: List[int],
+    model: str,
+    padding_side: str,
+    truncation_side: str,
+    context_length: int,
+    batch_size: int,
+) -> DataLoader:
+    """Get dataloader for a dataset"""
+    # Initialise tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.unk_token
+    tokenizer.padding_side = padding_side
+    tokenizer.truncation_side = truncation_side
+
+    # Tokenize data
+    tokenized_data = tokenizer(
+        data,
+        return_tensors="pt",
+        padding=True,
+        max_length=context_length,
+        truncation=True,
     )
-    labels = torch.tensor([1 if x["answer"] else 0 for x in data], dtype=torch.long)
-    dataset = TensorDataset(tensor_data, attention_mask, labels)
-    return (
-        DataLoader(dataset, batch_size=batch_size, shuffle=True),
-        labels.cpu().tolist(),
+
+    # Create tensor dataset and dataloader
+    tensor_data = TensorDataset(
+        tokenized_data["input_ids"],
+        tokenized_data["attention_mask"],
+        torch.tensor(labels, dtype=torch.long),
     )
+    dataloader = DataLoader(tensor_data, batch_size=batch_size, shuffle=True)
+    return dataloader
+
+
+def get_yes_no_pad_token_ids() -> Tuple[int, int, int]:
+    """Get the token ids for yes, no, and pad token for distilgpt2"""
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    no_token_id = tokenizer.encode("no")[0]
+    yes_token_id = tokenizer.encode("yes")[0]
+    pad_token_id = (
+        tokenizer.pad_token_id
+        if tokenizer.pad_token_id is not None
+        else tokenizer.unk_token_id
+    )
+    return no_token_id, yes_token_id, pad_token_id
 
 
 # ==========================
@@ -202,50 +245,7 @@ def train_model(
 # ==========================
 
 
-def boolq2tensor(
-    x: Dict[str, Any], tokenizer: PreTrainedTokenizer, append_answer: bool = False
-) -> torch.Tensor:
-    """Convert BoolQ data to a tensor"""
-    text = f"{x['passage']}.\n{x['question']}?\n"
-    if append_answer:
-        text += f"{'yes' if x['answer'] else 'no'}"
-    return tokenizer.encode(text, return_tensors="pt")
-
-
-def tensorlist2padded(
-    tensorlist: List[torch.Tensor], length: int, pad_token_id: int, pad_strategy: str
-) -> torch.Tensor:
-    """Pad a list of tensors to a given length"""
-    assert len(tensorlist) > 0
-    assert all(x.ndim == 2 for x in tensorlist)
-    assert all(x.shape[0] == 1 for x in tensorlist)
-    assert length > 0
-    assert pad_token_id is not None
-    assert pad_strategy in {"left", "right"}
-
-    for i, x in enumerate(tensorlist):
-        if x.shape[1] < length:
-            if pad_strategy == "left":
-                tensorlist[i] = torch.cat(
-                    [torch.full((1, length - x.shape[1]), pad_token_id), x], dim=1
-                )
-            else:
-                tensorlist[i] = torch.cat(
-                    [x, torch.full((1, length - x.shape[1]), pad_token_id)], dim=1
-                )
-        elif x.shape[1] > length:
-            if pad_strategy == "left":
-                tensorlist[i] = x[:, -length:]
-            else:
-                tensorlist[i] = x[:, :length]
-        else:
-            assert x.shape[1] == length
-
-    concat_tensor = torch.cat(tensorlist, dim=0)
-    attention_mask = torch.where(concat_tensor == pad_token_id, False, True)
-    return concat_tensor, attention_mask
-
-
+# TODO: change this to accept a dictionary of metrics
 def get_metric_str(labels: List[int], label_pred: List[int]) -> str:
     """Get a string representation of the metrics"""
     acc = accuracy_score(labels, label_pred)
@@ -324,7 +324,18 @@ def main() -> None:
     dataloader_args = {
         "context_length": args.context_length,
         "batch_size": args.batch_size,
-        "subset": args.use_subset,
+    }
+    distilgpt2_dataloader_args = {
+        "model": "distilgpt2",
+        "padding_side": "left",
+        "truncation_side": "left",
+        **dataloader_args,
+    }
+    distilroberta_dataloader_args = {
+        "model": "distilroberta-base",
+        "padding_side": "right",
+        "truncation_side": "left",
+        **dataloader_args,
     }
     optimizer_args = {
         "lr": args.lr,
@@ -340,22 +351,19 @@ def main() -> None:
     os.makedirs(args.save_dir, exist_ok=True)
     outfile = open(f"{args.save_dir}/{args.file_prefix}_OUTPUT.txt", "w")
 
-    # Initialize tokenizer
-    print("Initializing distilgpt2 model and tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-    no_token_id, yes_token_id = tokenizer.encode("no")[0], tokenizer.encode("yes")[0]
+    # Initialize model
+    print("Initializing distilgpt2 model...")
     model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(device)
 
     # Load datasets
     print("Loading BoolQ validation dataset...")
-    val_loader, val_labels = process_data_boolq(
-        "validation",
-        tokenizer,
-        tokenizer.unk_token_id,
-        False,
-        pad_strategy="left",
-        **dataloader_args,
+    val_data, val_labels = process_boolq(
+        "validation", append_answer=False, subset=args.use_subset
     )
+    val_loader = get_dataloader(val_data, val_labels, **distilgpt2_dataloader_args)
+
+    # Get token ids for yes and no
+    no_token_id, yes_token_id, pad_token_id = get_yes_no_pad_token_ids()
 
     # Zero-shot accuracy of distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.1:\n")
@@ -368,18 +376,16 @@ def main() -> None:
     # Finetune distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.2:\n")
     print("Loading BoolQ training dataset...")
-    train_loader, _ = process_data_boolq(
-        "train",
-        tokenizer,
-        tokenizer.unk_token_id,
-        True,
-        pad_strategy="left",
-        **dataloader_args,
+    train_data, train_labels = process_boolq(
+        "train", append_answer=True, subset=args.use_subset
+    )
+    train_loader = get_dataloader(
+        train_data, train_labels, **distilgpt2_dataloader_args
     )
 
     print("Finetuning distilgpt2 on BoolQ...")
     optimizer = torch.optim.AdamW(model.parameters(), **optimizer_args)
-    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.unk_token_id)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=pad_token_id)
     # TODO: model overfits to training data, need to train over full sequence
     losses = train_model(
         model,
@@ -412,23 +418,16 @@ def main() -> None:
 
     outfile.write("Checkpoint 1.4:\n")
     print("Loading BoolQ training dataset...")
-    tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
-    train_loader, _ = process_data_boolq(
-        "train",
-        tokenizer,
-        tokenizer.pad_token_id,
-        False,
-        pad_strategy="right",
-        **dataloader_args,
+    train_data, train_labels = process_boolq(
+        "train", append_answer=False, subset=args.use_subset
     )
-    val_loader, val_labels = process_data_boolq(
-        "validation",
-        tokenizer,
-        tokenizer.pad_token_id,
-        False,
-        pad_strategy="right",
-        **dataloader_args,
+    train_loader = get_dataloader(
+        train_data, train_labels, **distilroberta_dataloader_args
     )
+    val_data, val_labels = process_boolq(
+        "validation", append_answer=False, subset=args.use_subset
+    )
+    val_loader = get_dataloader(val_data, val_labels, **distilroberta_dataloader_args)
 
     print("Loading DistilRoBERTa model...")
     # TODO: Check if LMHead should be used instead of pooler

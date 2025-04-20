@@ -9,11 +9,10 @@ import torch.nn as nn
 from datasets import load_dataset
 from scipy.stats import pearsonr
 from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error
-from torch.utils.data import DataLoader, TensorDataset
-from transformers import AutoTokenizer, PreTrainedTokenizer, RobertaModel
+from transformers import RobertaModel
 
-from a3_p1_murugan_116745378 import (model_inference, plot_loss_and_accuracy,
-                                     process_data_boolq, tensorlist2padded,
+from a3_p1_murugan_116745378 import (get_dataloader, model_inference,
+                                     plot_loss_and_accuracy, process_boolq,
                                      train_model)
 
 torch.manual_seed(0)
@@ -23,28 +22,12 @@ torch.manual_seed(0)
 # ==========================
 
 
-def process_data_sst(
-    split: str,
-    tokenizer: PreTrainedTokenizer,
-    pad_token_id: int,
-    context_length: int,
-    batch_size: int,
-    pad_strategy: str,
-    subset: bool = False,
-) -> Tuple[DataLoader, List[int]]:
+def process_sst(split: str, subset: bool = False) -> Tuple[List[str], List[float]]:
+    """Process the SST dataset"""
     data = load_dataset("stanfordnlp/sst")[split]
     if subset:
         data = data.select(range(100))
-    tensor_list = [sst2tensor(x, tokenizer) for x in data]
-    tensor_data, attention_mask = tensorlist2padded(
-        tensor_list, context_length, pad_token_id, pad_strategy
-    )
-    values = torch.tensor([x["label"] for x in data], dtype=torch.float32)
-    dataset = TensorDataset(tensor_data, attention_mask, values)
-    return (
-        DataLoader(dataset, batch_size=batch_size, shuffle=True),
-        values.cpu().tolist(),
-    )
+    return data["sentence"], data["label"]
 
 
 # ==========================
@@ -143,10 +126,6 @@ def get_distilroberta_nores() -> nn.Module:
 # ==========================
 
 
-def sst2tensor(x: Dict[str, Any], tokenizer: PreTrainedTokenizer) -> torch.Tensor:
-    return tokenizer.encode(x["sentence"], return_tensors="pt")
-
-
 def get_boolq_validation_metric_str(metric_dict: dict) -> str:
     return f"""boolq validation set:
  distilRB-rand: overall acc: {metric_dict["rand"]["accuracy"]:.3f}, f1: {metric_dict["rand"]["f1"]:.3f}
@@ -194,8 +173,12 @@ def main() -> None:
     dataloader_args = {
         "context_length": args.context_length,
         "batch_size": args.batch_size,
-        "pad_strategy": "right",
-        "subset": args.use_subset,
+    }
+    distilroberta_dataloader_args = {
+        "model": "distilroberta-base",
+        "padding_side": "right",
+        "truncation_side": "left",
+        **dataloader_args,
     }
     optimizer_args = {"lr": args.lr, "weight_decay": args.weight_decay}
     trainer_args = {
@@ -218,13 +201,16 @@ def main() -> None:
 
     # Load data
     outfile.write("Checkpoint 2.2:\n")
-    tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
-    train_loader, _ = process_data_boolq(
-        "train", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
+    train_data, train_labels = process_boolq(
+        "train", append_answer=False, subset=args.use_subset
     )
-    val_loader, val_labels = process_data_boolq(
-        "validation", tokenizer, tokenizer.pad_token_id, False, **dataloader_args
+    train_loader = get_dataloader(
+        train_data, train_labels, **distilroberta_dataloader_args
     )
+    val_data, val_labels = process_boolq(
+        "validation", append_answer=False, subset=args.use_subset
+    )
+    val_loader = get_dataloader(val_data, val_labels, **distilroberta_dataloader_args)
 
     metric_dict = {}
     for model_name in ["rand", "base", "kqv", "nores"]:
@@ -262,14 +248,15 @@ def main() -> None:
     outfile.write(get_boolq_validation_metric_str(metric_dict) + "\n\n")
 
     outfile.write("Checkpoint 2.3:\n")
-    train_loader, _ = process_data_sst(
-        "train", tokenizer, tokenizer.pad_token_id, **dataloader_args
+    train_data, train_values = process_sst("train", subset=args.use_subset)
+    train_loader = get_dataloader(
+        train_data, train_values, **distilroberta_dataloader_args
     )
-    val_loader, val_values = process_data_sst(
-        "validation", tokenizer, tokenizer.pad_token_id, **dataloader_args
-    )
-    test_loader, test_values = process_data_sst(
-        "test", tokenizer, tokenizer.pad_token_id, **dataloader_args
+    val_data, val_values = process_sst("validation", subset=args.use_subset)
+    val_loader = get_dataloader(val_data, val_values, **distilroberta_dataloader_args)
+    test_data, test_values = process_sst("test", subset=args.use_subset)
+    test_loader = get_dataloader(
+        test_data, test_values, **distilroberta_dataloader_args
     )
     metric_dict = {}
     for model_name in ["rand", "base", "kqv", "nores"]:
