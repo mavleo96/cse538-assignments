@@ -2,20 +2,22 @@
 
 import argparse
 import os
-from typing import Any, Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from datasets import load_dataset
+from einops import rearrange
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score)
+from torch.optim import AdamW
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, GPT2LMHeadModel, RobertaModel
 
+np.random.seed(0)
 torch.manual_seed(0)
 
 # ==========================
@@ -23,15 +25,28 @@ torch.manual_seed(0)
 # ==========================
 
 
+def get_distilgpt2_special_token_ids() -> Tuple[int, int, int]:
+    """Get the token IDs for 'yes', 'no', and padding tokens in the distilgpt2 tokenizer."""
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    no_token_id = tokenizer.encode("no")[0]
+    yes_token_id = tokenizer.encode("yes")[0]
+    pad_token_id = (
+        tokenizer.pad_token_id
+        if tokenizer.pad_token_id is not None
+        else tokenizer.eos_token_id
+    )
+    return no_token_id, yes_token_id, pad_token_id
+
+
 # This function is also used in a1_p2_murugan_116745378.py
-def process_boolq(
+def load_and_preprocess_boolq(
     split: str, append_answer: bool = False, subset: bool = False
 ) -> Tuple[List[str], List[int]]:
-    """Process the BoolQ dataset"""
+    """Load and preprocess the BoolQ dataset for binary classification."""
     boolq_dataset = load_dataset("google/boolq")
     data = boolq_dataset[split]
     if subset:
-        data = data.select(range(100))
+        data = data.select(range(1600 if split == "train" else 800))
     if append_answer:
         li = [
             f"{x['passage']}.\n{x['question']}?\n{'yes' if x['answer'] else 'no'}"
@@ -44,18 +59,19 @@ def process_boolq(
 
 
 # This function is also used in a1_p2_murugan_116745378.py
-def get_dataloader(
+def create_dataloader(
     data: List[str],
     labels: List[int],
-    model: str,
+    model_name: str,
     padding_side: str,
     truncation_side: str,
     context_length: int,
     batch_size: int,
 ) -> DataLoader:
-    """Get dataloader for a dataset"""
-    # Initialise tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model)
+    """Create a PyTorch DataLoader for the given dataset with specified tokenization parameters."""
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # Note: We assign pad_token to unk_token if it is not assigned (for distilgpt2)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.unk_token
     tokenizer.padding_side = padding_side
@@ -74,23 +90,35 @@ def get_dataloader(
     tensor_data = TensorDataset(
         tokenized_data["input_ids"],
         tokenized_data["attention_mask"],
-        torch.tensor(labels, dtype=torch.long),
+        # Note: We don't convert dtype below since it is handled in trainer class
+        torch.tensor(labels),
     )
-    dataloader = DataLoader(tensor_data, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(tensor_data, batch_size=batch_size, shuffle=False)
     return dataloader
 
 
-def get_yes_no_pad_token_ids() -> Tuple[int, int, int]:
-    """Get the token ids for yes, no, and pad token for distilgpt2"""
-    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
-    no_token_id = tokenizer.encode("no")[0]
-    yes_token_id = tokenizer.encode("yes")[0]
-    pad_token_id = (
-        tokenizer.pad_token_id
-        if tokenizer.pad_token_id is not None
-        else tokenizer.unk_token_id
-    )
-    return no_token_id, yes_token_id, pad_token_id
+# ==========================
+#     Model Functions
+# ==========================
+
+
+# This function is also used in a1_p2_murugan_116745378.py
+def load_distilgpt2_pretrained() -> nn.Module:
+    """Load the pretrained distilgpt2 model."""
+    model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+    return model
+
+
+# This function is also used in a1_p2_murugan_116745378.py
+def load_distilroberta_pretrained() -> nn.Module:
+    """Load the pretrained distilroberta model with binary classification head."""
+    model = RobertaModel.from_pretrained("distilroberta-base")
+
+    # Note: We modify the pooler layer to be a dense layer from 768 to 1 with a sigmoid activation function
+    # This allows us to use the model for binary classification as well as regression task with y range [0, 1]
+    model.pooler.dense = nn.Linear(model.pooler.dense.in_features, 1)
+    model.pooler.activation = nn.Sigmoid()
+    return model
 
 
 # ==========================
@@ -98,146 +126,148 @@ def get_yes_no_pad_token_ids() -> Tuple[int, int, int]:
 # ==========================
 
 
-def model_inference(
-    model: nn.Module,
-    loader: DataLoader,
-    indices: Union[List[int], None],
-    device: torch.device,
-    desc: str = "Validation",
-    regression: bool = False,
-) -> List[int]:
-    """Run inference on a model"""
-    model.eval()
-    preds = []
-    with torch.no_grad():
-        for batch in tqdm(loader, desc=desc):
-            X, attn_mask, _ = batch
-            X, attn_mask = X.to(device), attn_mask.to(device)
-            outputs = model(X, attention_mask=attn_mask)
-            if "logits" in outputs:
-                outputs = outputs.logits[:, -1, :]
-            elif "pooler_output" in outputs:
-                outputs = outputs.pooler_output
-            else:
-                raise ValueError(f"Unknown output type: {outputs.keys()}")
-            if indices is not None:
-                # Indices are used to select the logits for the correct tokens i.e [no, yes]
-                outputs = outputs[:, indices]
-            preds.extend(outputs.cpu().tolist())
+# This class is also used in a1_p2_murugan_116745378.py
+class Trainer:
+    """Reusable trainer class for all models and tasks."""
 
-    preds = np.array(preds)
-    if regression:
-        assert preds.shape[-1] == 1
-        preds = preds[:, 0]
-    else:
-        if preds.shape[-1] == 1:
-            # If the model is a binary classifier, use a sigmoid function to get the probability of the positive class
-            preds = 1 / (1 + np.exp(-preds[:, 0]))
-            preds = np.where(preds > 0.5, 1, 0)
-        else:
-            # If the model is a multi-class classifier, use the argmax function to get the predicted class
-            preds = np.argmax(preds, axis=-1)
-    return preds.tolist()
+    def __init__(
+        self,
+        model: nn.Module,
+        model_type: str,
+        task_type: str,
+        device: str,
+        lr: float = 1e-5,
+        weight_decay: float = 1e-3,
+        loss_fn: Union[nn.Module, None] = None,
+    ) -> None:
+        self.model = model
+        self.model_type = model_type  # "classification" or "regression"
+        self.task_type = task_type  # "instruct-tuning" or "fine-tuning"
+        # Initialize loss function based on model type and task type
+        self.optimizer = AdamW(
+            self.model.parameters(), lr=lr, weight_decay=weight_decay
+        )
 
+        # Note: We use different loss functions for different model types and task types
+        # If loss_fn is provided, we use it instead of the default loss functions
+        if loss_fn is not None:
+            self.loss_fn = loss_fn
+        elif self.model_type == "regression":
+            self.loss_fn = nn.MSELoss()
+        elif (
+            self.model_type == "classification" and self.task_type == "instruct-tuning"
+        ):
+            self.loss_fn = nn.CrossEntropyLoss()
+        elif self.model_type == "classification" and self.task_type == "fine-tuning":
+            self.loss_fn = nn.BCELoss()
 
-def train_model(
-    model: nn.Module,
-    train_loader: DataLoader,
-    val_loader: DataLoader,
-    loss_fn: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    epochs: int,
-    save_model: bool = False,
-    filename: str = "model.pt",
-) -> Tuple[List[float], List[float], List[float], List[float]]:
-    """Train a model and return training and validation losses and accuracies"""
-    train_losses, dev_losses = [], []
-    train_accuracies, dev_accuracies = [], []
+        self.device = device
+        self.model.to(device)
 
-    # Training loop
-    progress_bar = tqdm(range(epochs), desc="Training", leave=True)
-    for epoch in progress_bar:
-        model.train()
-        running_loss, running_total = 0.0, 0
-        train_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1} [Train]", leave=False)
-        for batch in train_bar:
-            # Get batch
-            X, attn_mask, y = batch
-            X, attn_mask, y = X.to(device), attn_mask.to(device), y.to(device)
+    def _forward(
+        self, X: torch.Tensor, attn_mask: torch.Tensor, y: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        with torch.amp.autocast(device_type=self.device, dtype=torch.bfloat16):
+            if self.task_type == "instruct-tuning":
+                # Remove the last token from the input and attention mask
+                output = self.model(X[:, :-1], attention_mask=attn_mask[:, :-1])
+                output = output.logits
+                # Rearrange the output to be of shape (batch_size, sequence_length, num_classes)
+                output = rearrange(output, "b s c -> b c s")
+                y = X[:, 1:]
+            else:  # task_type == "fine-tuning" for both classification and regression
+                # Get the pooler layer output
+                output = self.model(X, attention_mask=attn_mask)
+                output = output.pooler_output
 
-            # Forward pass
-            scaler = torch.amp.GradScaler()
-            with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                outputs = model(X, attention_mask=attn_mask)
-                if "logits" in outputs:
-                    outputs = outputs.logits[:, -1, :]
-                elif "pooler_output" in outputs:
-                    outputs = outputs.pooler_output
-                else:
-                    raise ValueError(f"Unknown output type: {outputs.keys()}")
-                if isinstance(loss_fn, (nn.BCEWithLogitsLoss, nn.MSELoss)):
-                    loss = loss_fn(outputs, y.float().reshape(-1, 1))
-                elif isinstance(loss_fn, nn.CrossEntropyLoss):
-                    loss = loss_fn(outputs, y.long())
-                else:
-                    raise ValueError(f"Unknown loss function: {loss_fn}")
+        loss = self._loss(output, y)
+        return output, loss
 
-            # Backward pass
-            optimizer.zero_grad()
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+    def _loss(self, output: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        if self.task_type == "instruct-tuning" and self.model_type == "classification":
+            loss = self.loss_fn(output.float(), y)
+        else:  # task_type == "fine-tuning" for both classification and regression
+            loss = self.loss_fn(output.float(), y.float().reshape(-1, 1))
+        return loss
 
-            # TODO: add accuracy / mae score
-            # Update metrics
-            running_loss += loss.item() * X.size(0)
-            running_total += X.size(0)
-            train_bar.set_postfix(loss=loss.item())
-
-        train_losses.append(running_loss / running_total)
-
-        # Validation loop
-        model.eval()
-        running_loss, running_total = 0.0, 0
-        with torch.no_grad():
-            val_bar = tqdm(
-                val_loader, desc=f"Epoch {epoch + 1} [Validation]", leave=False
+    # TODO: log stepwise loss and remove val loss tracking
+    def train(
+        self,
+        train_dataloader: DataLoader,
+        epochs: int,
+        desc: str,
+    ) -> Tuple[List[float], List[float]]:
+        """Train the model for a given number of epochs."""
+        epoch_losses, step_losses = [], []
+        progress_bar = tqdm(range(epochs), desc=desc)
+        for epoch in progress_bar:
+            self.model.train()
+            train_bar = tqdm(
+                train_dataloader, desc=f"Epoch {epoch + 1} [Train]", leave=False
             )
-            for batch in val_bar:
-                # Get batch
+            running_loss, running_total = 0, 0
+            for batch in train_bar:
                 X, attn_mask, y = batch
-                X, attn_mask, y = X.to(device), attn_mask.to(device), y.to(device)
+                X, attn_mask, y = (
+                    X.to(self.device),
+                    attn_mask.to(self.device),
+                    y.to(self.device),
+                )
+                _, loss = self._forward(X, attn_mask, y)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                running_loss += loss.item() * y.size(0)
+                running_total += y.size(0)
+                step_losses.append(loss.item())
+                train_bar.set_postfix(loss=loss.item())
+            epoch_losses.append(running_loss / running_total)
 
-                # Forward pass
-                with torch.amp.autocast(device_type=device, dtype=torch.bfloat16):
-                    outputs = model(X, attention_mask=attn_mask)
-                    if "logits" in outputs:
-                        outputs = outputs.logits[:, -1, :]
-                    elif "pooler_output" in outputs:
-                        outputs = outputs.pooler_output
-                    else:
-                        raise ValueError(f"Unknown output type: {outputs.keys()}")
-                    if isinstance(loss_fn, (nn.BCEWithLogitsLoss, nn.MSELoss)):
-                        loss = loss_fn(outputs, y.float().reshape(-1, 1))
-                    elif isinstance(loss_fn, nn.CrossEntropyLoss):
-                        loss = loss_fn(outputs, y.long())
-                    else:
-                        raise ValueError(f"Unknown loss function: {loss_fn}")
+            progress_bar.set_postfix(train_loss=epoch_losses[-1])
 
-                # Update metrics
-                running_loss += loss.item() * X.size(0)
-                running_total += X.size(0)
-                val_bar.set_postfix(loss=loss.item())
-        dev_losses.append(running_loss / running_total)
+        progress_bar.close()
+        return epoch_losses, step_losses
 
-    progress_bar.close()
+    def inference(
+        self, test_dataloader: DataLoader, indices: Union[List[int], None] = None
+    ) -> List:
+        """Inference the model on the test set."""
+        self.model.eval()
+        preds = []
+        with torch.no_grad():
+            test_bar = tqdm(test_dataloader, desc="Inference")
+            for batch in test_bar:
+                X, attn_mask, _ = batch
+                X, attn_mask = (
+                    X.to(self.device),
+                    attn_mask.to(self.device),
+                )
+                output = self.model(X, attention_mask=attn_mask)
+                if self.task_type == "instruct-tuning":
+                    assert "logits" in output
+                    # We only want the last token's logits during inference
+                    output = output.logits[:, -1, :]
+                else:  # task_type == "fine-tuning"
+                    assert "pooler_output" in output
+                    output = output.pooler_output
+                if indices is not None:
+                    # Note: Indices are used to select the logits for the correct tokens i.e [no, yes]
+                    output = output[:, indices]
+                preds.extend(output.cpu().tolist())
+        preds = np.array(preds)
 
-    if save_model:
-        print("Saving model...")
-        torch.save(model.state_dict(), filename)
-
-    return train_losses, dev_losses, train_accuracies, dev_accuracies
+        # Note: We use different post-processing for different model types and task types
+        if self.model_type == "regression":
+            assert preds.shape[-1] == 1
+            preds = preds[:, 0]
+        else:
+            if preds.shape[-1] == 1:
+                # If the model is a binary classifier, use a decision threshold of 0.5
+                preds = np.where(preds > 0.5, 1, 0).reshape(-1)
+            else:
+                # If the model is a multi-class classifier, use the argmax function to get the predicted class
+                preds = np.argmax(preds, axis=-1)
+        return preds.tolist()
 
 
 # ==========================
@@ -245,54 +275,83 @@ def train_model(
 # ==========================
 
 
-# TODO: change this to accept a dictionary of metrics
-def get_metric_str(labels: List[int], label_pred: List[int]) -> str:
-    """Get a string representation of the metrics"""
-    acc = accuracy_score(labels, label_pred)
-    f1 = f1_score(labels, label_pred, zero_division=0, average="macro")
-    prec_yes = precision_score(labels, label_pred, pos_label=1, zero_division=0)
-    recall_yes = recall_score(labels, label_pred, pos_label=1, zero_division=0)
-    prec_no = precision_score(labels, label_pred, pos_label=0, zero_division=0)
-    recall_no = recall_score(labels, label_pred, pos_label=0, zero_division=0)
-    f1_yes = f1_score(labels, label_pred, pos_label=1, zero_division=0)
-    f1_no = f1_score(labels, label_pred, pos_label=0, zero_division=0)
+# This function is also used in a1_p2_murugan_116745378.py
+def compute_binary_metrics(
+    labels: List[int], predictions: List[int]
+) -> Dict[str, float]:
+    """Compute binary classification metrics for the given labels and predictions."""
+    metrics = {
+        "overall": {
+            "acc": accuracy_score(labels, predictions),
+            "f1": f1_score(labels, predictions, zero_division=0, average="macro"),
+        },
+        "positive": {
+            "prec": precision_score(labels, predictions, pos_label=1, zero_division=0),
+            "rec": recall_score(labels, predictions, pos_label=1, zero_division=0),
+            "f1": f1_score(labels, predictions, pos_label=1, zero_division=0),
+        },
+        "negative": {
+            "prec": precision_score(labels, predictions, pos_label=0, zero_division=0),
+            "rec": recall_score(labels, predictions, pos_label=0, zero_division=0),
+            "f1": f1_score(labels, predictions, pos_label=0, zero_division=0),
+        },
+    }
+    return metrics
 
-    return f"""Overall: acc: {acc:.3f}, f1: {f1:.3f}
-    Yes: prec: {prec_yes:.3f}, recall: {recall_yes:.3f}, f1: {f1_yes:.3f}
-     No: prec: {prec_no:.3f}, recall: {recall_no:.3f}, f1: {f1_no:.3f}"""
+
+def format_metrics(metrics: Dict[str, Dict[str, float]]) -> str:
+    """Format metrics dictionary into a readable string."""
+    overall = metrics["overall"]
+    positive = metrics["positive"]
+    negative = metrics["negative"]
+
+    return f"""Overall: acc: {overall['acc']:.3f}, f1: {overall['f1']:.3f}
+    Yes: prec: {positive['prec']:.3f}, rec: {positive['rec']:.3f}, f1: {positive['f1']:.3f}
+     No: prec: {negative['prec']:.3f}, rec: {negative['rec']:.3f}, f1: {negative['f1']:.3f}"""
 
 
-# Function copied from a1_p2_murugan_116745378.py
-def plot_loss_and_accuracy(
-    train_losses: List[float],
-    dev_losses: List[float],
-    train_accuracies: List[float],
-    dev_accuracies: List[float],
+# This function is also used in a1_p2_murugan_116745378.py
+# BEGIN[ChatGPT][https://chatgpt.com/]"Python code + fix this code to accept epochlosses and steplosses (not same length) eg, say there are 500 steps and 5 epochs then i want the plot to show step loss and overlay epoch loss from 100(not zero), then 200 and so"
+def plot_training_loss(
+    epoch_losses: List[float],
+    step_losses: List[float],
     filename: str,
 ) -> None:
-    """Plot loss and accuracy for training and dev data"""
-    # Create a figure with two subplots
-    _, ax1 = plt.subplots(figsize=(10, 5))
+    """Plot stepwise training loss with overlaid epoch loss markers."""
 
-    # Plot loss on left y-axis
-    ax1.plot(train_losses, label="Train Loss", color="blue", linestyle="-")
-    ax1.plot(dev_losses, label="Dev Loss", color="red", linestyle="--")
-    ax1.set_xlabel("Epochs")
-    ax1.set_ylabel("Loss")
-    ax1.legend(loc="upper left")
-    ax1.grid()
+    fig, ax = plt.subplots(figsize=(10, 6))
+    steps = list(range(1, len(step_losses) + 1))
 
-    # Create a second y-axis for accuracy
-    ax2 = ax1.twinx()
-    ax2.plot(train_accuracies, label="Train Accuracy", color="green", linestyle="-")
-    ax2.plot(dev_accuracies, label="Dev Accuracy", color="orange", linestyle="--")
-    ax2.set_ylabel("Accuracy")
-    ax2.legend(loc="upper right")
+    # Plot stepwise loss
+    ax.plot(steps, step_losses, color="blue", linestyle="-", label="Step Loss")
 
-    # Save the plot
-    plt.title("Training & Dev Loss and Accuracy")
+    # Overlay epoch loss every N steps
+    steps_per_epoch = len(step_losses) // len(epoch_losses)
+    epoch_steps = [steps_per_epoch * (i + 1) for i in range(len(epoch_losses))]
+
+    ax.plot(
+        epoch_steps,
+        epoch_losses,
+        color="red",
+        linestyle="--",
+        marker="o",
+        label="Epoch Loss",
+    )
+
+    ax.set_xlabel("Steps")
+    ax.set_ylabel("Loss")
+    ax.grid(True)
+    ax.legend()
+    ax.set_xticks(
+        epoch_steps if len(step_losses) > 20 else steps
+    )  # Avoid cluttering for large step counts
+
     print(f"Saving plot to {filename}...")
     plt.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+# END[ChatGPT]
 
 
 # ==========================
@@ -305,12 +364,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 1"
     )
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-5)
-    parser.add_argument("--weight_decay", type=float, default=1e-2)
-    parser.add_argument("--context_length", type=int, default=256)
-    parser.add_argument("--save_model", action="store_true", default=False)
+    parser.add_argument("--weight_decay", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p1_murugan_116745378")
     parser.add_argument("--use_subset", action="store_true", default=False)
@@ -321,29 +378,27 @@ def main() -> None:
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     print(f"Using device: {device}")
-    dataloader_args = {
-        "context_length": args.context_length,
+    base_dataloader_config = {
         "batch_size": args.batch_size,
     }
-    distilgpt2_dataloader_args = {
-        "model": "distilgpt2",
-        "padding_side": "left",
-        "truncation_side": "left",
-        **dataloader_args,
+    gpt2_dataloader_config = {
+        "model_name": "distilgpt2",
+        "padding_side": "left",  # Left padding used for decoder models
+        "truncation_side": "left",  # Left truncation used to preserve the question tokens
+        "context_length": 200,  # Smaller context give better zero-shot & instruction-tuning results
+        **base_dataloader_config,
     }
-    distilroberta_dataloader_args = {
-        "model": "distilroberta-base",
-        "padding_side": "right",
-        "truncation_side": "left",
-        **dataloader_args,
+    roberta_dataloader_config = {
+        "model_name": "distilroberta-base",
+        "padding_side": "right",  # Right padding used for encoder models
+        "truncation_side": "left",  # Left truncation used to preserve the question tokens
+        "context_length": 256,
+        **base_dataloader_config,
     }
-    optimizer_args = {
+    trainer_config = {
+        "device": device,
         "lr": args.lr,
         "weight_decay": args.weight_decay,
-    }
-    trainer_args = {
-        "epochs": args.epochs,
-        "save_model": args.save_model,
     }
 
     # Create and open output file
@@ -353,118 +408,84 @@ def main() -> None:
 
     # Initialize model
     print("Initializing distilgpt2 model...")
-    model = GPT2LMHeadModel.from_pretrained("distilgpt2").to(device)
+    model = load_distilgpt2_pretrained()
+    trainer = Trainer(model, "classification", "instruct-tuning", **trainer_config)
 
     # Load datasets
     print("Loading BoolQ validation dataset...")
-    val_data, val_labels = process_boolq(
+    val_data, val_labels = load_and_preprocess_boolq(
         "validation", append_answer=False, subset=args.use_subset
     )
-    val_loader = get_dataloader(val_data, val_labels, **distilgpt2_dataloader_args)
+    val_loader = create_dataloader(val_data, val_labels, **gpt2_dataloader_config)
 
     # Get token ids for yes and no
-    no_token_id, yes_token_id, pad_token_id = get_yes_no_pad_token_ids()
+    n_id, y_id, _ = get_distilgpt2_special_token_ids()
 
     # Zero-shot accuracy of distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.1:\n")
     print("Evaluating Zero-shot accuracy of distilgpt2 on BoolQ...")
-    label_pred = model_inference(
-        model, val_loader, [no_token_id, yes_token_id], device, "Zero-shot DistilGPT2"
-    )
-    outfile.write(get_metric_str(val_labels, label_pred) + "\n\n")
+    label_pred = trainer.inference(val_loader, [n_id, y_id])
+    results_dict = compute_binary_metrics(val_labels, label_pred)
+    outfile.write(format_metrics(results_dict) + "\n\n")
 
-    # Finetune distilgpt2 on BoolQ
+    # Instruct-tune distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.2:\n")
     print("Loading BoolQ training dataset...")
-    train_data, train_labels = process_boolq(
+    train_data, train_labels = load_and_preprocess_boolq(
         "train", append_answer=True, subset=args.use_subset
     )
-    train_loader = get_dataloader(
-        train_data, train_labels, **distilgpt2_dataloader_args
-    )
+    train_loader = create_dataloader(train_data, train_labels, **gpt2_dataloader_config)
 
-    print("Finetuning distilgpt2 on BoolQ...")
-    optimizer = torch.optim.AdamW(model.parameters(), **optimizer_args)
-    loss_fn = nn.CrossEntropyLoss(ignore_index=pad_token_id)
-    # TODO: model overfits to training data, need to train over full sequence
-    losses = train_model(
-        model,
-        train_loader,
-        val_loader,
-        loss_fn,
-        optimizer,
-        device,
-        filename=f"{args.save_dir}/{args.file_prefix}_model_distilgpt2.pt",
-        **trainer_args,
+    print("Instruct-tuning distilgpt2 on BoolQ...")
+    losses = trainer.train(
+        train_loader, args.epochs, "Instruct-tuning distilgpt2 on BoolQ"
     )
-    plot_loss_and_accuracy(
-        *losses, f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilgpt2.png"
+    plot_training_loss(
+        *losses, f"{args.save_dir}/{args.file_prefix}_loss_distilgpt2.png"
     )
     outfile.write(
-        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_accuracy_distilgpt2.png\n\n"
+        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_distilgpt2.png\n\n"
     )
 
-    # Zero-shot accuracy of finetuned distilgpt2 on BoolQ
+    # Zero-shot accuracy of instruct-tuned distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.3:\n")
-    print("Evaluating Zero-shot accuracy of finetuned distilgpt2 on BoolQ...")
-    label_pred = model_inference(
-        model,
-        val_loader,
-        [no_token_id, yes_token_id],
-        device,
-        "Instruction-tuned DistilGPT2",
-    )
-    outfile.write(get_metric_str(val_labels, label_pred) + "\n\n")
+    print("Evaluating accuracy of instruct-tuned distilgpt2 on BoolQ...")
+    label_pred = trainer.inference(val_loader, [n_id, y_id])
+    results_dict = compute_binary_metrics(val_labels, label_pred)
+    outfile.write(format_metrics(results_dict) + "\n\n")
 
     outfile.write("Checkpoint 1.4:\n")
-    print("Loading BoolQ training dataset...")
-    train_data, train_labels = process_boolq(
+    print("Loading BoolQ training dataset without answer...")
+    train_data, train_labels = load_and_preprocess_boolq(
         "train", append_answer=False, subset=args.use_subset
     )
-    train_loader = get_dataloader(
-        train_data, train_labels, **distilroberta_dataloader_args
+    train_loader = create_dataloader(
+        train_data, train_labels, **roberta_dataloader_config
     )
-    val_data, val_labels = process_boolq(
+    val_data, val_labels = load_and_preprocess_boolq(
         "validation", append_answer=False, subset=args.use_subset
     )
-    val_loader = get_dataloader(val_data, val_labels, **distilroberta_dataloader_args)
+    val_loader = create_dataloader(val_data, val_labels, **roberta_dataloader_config)
 
     print("Loading DistilRoBERTa model...")
-    # TODO: Check if LMHead should be used instead of pooler
-    model = RobertaModel.from_pretrained("distilroberta-base")
-    model.pooler.dense = nn.Linear(model.pooler.dense.in_features, 1)
-    # TODO: autocast not compatible with BCE loss
-    model.pooler.activation = nn.Identity()
-    model = model.to(device)
-    # TODO: only optimize pooler?
-    optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
-    # TODO: torch.nn.BCELoss is unsafe to autocast
-    loss_fn = nn.BCEWithLogitsLoss()
-    # TODO: model seems to be predicting either 0 or 1 for all examples
-    losses = train_model(
-        model,
-        train_loader,
-        val_loader,
-        loss_fn,
-        optimizer,
-        device,
-        filename=f"{args.save_dir}/{args.file_prefix}_model_distilroberta.pt",
-        **trainer_args,
+    model = load_distilroberta_pretrained()
+    trainer = Trainer(model, "classification", "fine-tuning", **trainer_config)
+
+    print("Finetuning distilroberta on BoolQ...")
+    losses = trainer.train(
+        train_loader, args.epochs, "Finetuning distilroberta on BoolQ"
     )
-    plot_loss_and_accuracy(
-        *losses, f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta.png"
+    plot_training_loss(
+        *losses, f"{args.save_dir}/{args.file_prefix}_loss_distilroberta.png"
     )
     outfile.write(
-        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta.png\n\n"
+        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_distilroberta.png\n\n"
     )
-    label_pred = model_inference(
-        model,
-        val_loader,
-        None,
-        device,
-        "Finetuned DistilRoBERTa",
-    )
-    outfile.write(get_metric_str(val_labels, label_pred) + "\n")
+
+    print("Evaluating accuracy of finetuned distilroberta on BoolQ...")
+    label_pred = trainer.inference(val_loader)
+    results_dict = compute_binary_metrics(val_labels, label_pred)
+    outfile.write(format_metrics(results_dict) + "\n")
 
     # Close output file
     print("Closing output file...")
