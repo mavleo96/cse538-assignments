@@ -213,6 +213,10 @@ def main() -> None:
         description="script to run cse538 assignment 3 part 2"
     )
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--boolq_batch_size", type=int, default=24)
+    parser.add_argument("--sst_batch_size", type=int, default=32)
+    parser.add_argument("--boolq_context_length", type=int, default=256)
+    parser.add_argument("--sst_context_length", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--weight_decay", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="results")
@@ -230,12 +234,12 @@ def main() -> None:
         "truncation_side": "left",  # Left truncation used for preserve the question tokens
     }
     boolq_config = {
-        "context_length": 256,
-        "batch_size": 8,
+        "context_length": args.boolq_context_length,
+        "batch_size": args.boolq_batch_size,
     }
     sst_config = {
-        "context_length": 128,
-        "batch_size": 16,
+        "context_length": args.sst_context_length,
+        "batch_size": args.sst_batch_size,
     }
     trainer_args = {
         "device": device,
