@@ -2,31 +2,34 @@
 
 import argparse
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
+from a3_p1_murugan_116745378 import (Trainer, create_dataloader,
+                                     load_and_preprocess_boolq,
+                                     load_distilroberta_pretrained,
+                                     plot_training_loss)
 from datasets import load_dataset
 from scipy.stats import pearsonr
 from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error
-from transformers import RobertaModel
 
-from a3_p1_murugan_116745378 import (get_dataloader, model_inference,
-                                     plot_loss_and_accuracy, process_boolq,
-                                     train_model)
-
-torch.manual_seed(0)
+np.random.seed(42)
+torch.manual_seed(42)
 
 # ==========================
 #     Data Functions
 # ==========================
 
 
-def process_sst(split: str, subset: bool = False) -> Tuple[List[str], List[float]]:
-    """Process the SST dataset"""
+def load_and_preprocess_sst(
+    split: str, subset: bool = False
+) -> Tuple[List[str], List[float]]:
+    """Load and preprocess the Stanford Sentiment Treebank dataset for sentiment analysis."""
     data = load_dataset("stanfordnlp/sst")[split]
     if subset:
-        data = data.select(range(100))
+        data = data.select(range(800))
     return data["sentence"], data["label"]
 
 
@@ -35,44 +38,41 @@ def process_sst(split: str, subset: bool = False) -> Tuple[List[str], List[float
 # ==========================
 
 
-def get_distilroberta() -> nn.Module:
-    # TODO: Check if model with LM head should be used for this task
-    model = RobertaModel.from_pretrained("distilroberta-base")
+def initialize_distilroberta_random(model: nn.Module) -> nn.Module:
+    """Randomly initialize the distilroberta model weights."""
+
+    def init_weights(module):
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight)
+            nn.init.normal_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.ones_(module.bias)
+
+    model.apply(init_weights)
     return model
 
 
-def get_distilroberta_rand() -> nn.Module:
-    model = RobertaModel.from_pretrained("distilroberta-base")
-    for name, module in model.named_modules():
-        # TODO: check if this is correct or this is to be done for all layers
-        if "roberta.encoder.layer.4" in name or "roberta.encoder.layer.5" in name:
-            if isinstance(module, nn.Linear):
-                nn.init.normal_(module.weight)
-                nn.init.normal_(module.bias)
-            elif isinstance(module, nn.LayerNorm):
-                nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
+def initialize_distilroberta_shared_kqv(model: nn.Module) -> nn.Module:
+    """Initialize the distilroberta model with shared K-Q-V weights."""
+    # Modify 4th and 5th layers
+    for name in ["encoder.layer.4", "encoder.layer.5"]:
+        module = model.get_submodule(name)
+        w = (module.attention.self.key.weight + module.attention.self.query.weight) / 2
+        b = (module.attention.self.key.bias + module.attention.self.query.bias) / 2
+        shared_linear_layer = nn.Linear(w.shape[1], w.shape[0])
+        with torch.no_grad():
+            shared_linear_layer.weight.copy_(w)
+            shared_linear_layer.bias.copy_(b)
+
+        # Replace the original key, query, and value layers with the shared linear layer
+        module.attention.self.key = shared_linear_layer
+        module.attention.self.query = shared_linear_layer
+        module.attention.self.value = shared_linear_layer
     return model
 
 
-def get_distilroberta_kqv() -> nn.Module:
-    model = RobertaModel.from_pretrained("distilroberta-base")
-    for name, module in model.named_modules():
-        if name in {"roberta.encoder.layer.4", "roberta.encoder.layer.5"}:
-            w = (
-                module.attention.self.key.weight + module.attention.self.query.weight
-            ) / 2
-            b = (module.attention.self.key.bias + module.attention.self.query.bias) / 2
-            shared_linear_layer = nn.Linear(w.shape[1], w.shape[0])
-            with torch.no_grad():
-                shared_linear_layer.weight.copy_(w)
-                shared_linear_layer.bias.copy_(b)
-            module.attention.self.key = shared_linear_layer
-            module.attention.self.query = shared_linear_layer
-            module.attention.self.value = shared_linear_layer
-    return model
-
-
+# RobertaOutput modified to remove residual connection
 class RobertaOutputNoRes(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -89,6 +89,7 @@ class RobertaOutputNoRes(nn.Module):
         return hidden_states
 
 
+# RobertaSelfOutput modified to remove residual connection
 class RobertaSelfOutputNoRes(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -105,19 +106,41 @@ class RobertaSelfOutputNoRes(nn.Module):
         return hidden_states
 
 
-def get_distilroberta_nores() -> nn.Module:
-    model = RobertaModel.from_pretrained("distilroberta-base", is_decoder=True)
+def initialize_distilroberta_no_residual(model: nn.Module) -> nn.Module:
+    """Initialize the distilroberta model with removed residual connections."""
+    # Modify 4th and 5th layers
+    for name in ["encoder.layer.4", "encoder.layer.5"]:
+        module = model.get_submodule(name)
 
-    for name, module in model.named_modules():
-        if name in {"roberta.encoder.layer.4", "roberta.encoder.layer.5"}:
-            nores_self_output = RobertaSelfOutputNoRes(model.config)
-            nores_output = RobertaOutputNoRes(model.config)
+        # Create new self-output and output layers without residual connections
+        nores_self_output = RobertaSelfOutputNoRes(model.config)
+        nores_output = RobertaOutputNoRes(model.config)
 
-            nores_self_output.load_state_dict(module.attention.output.state_dict())
-            nores_output.load_state_dict(module.output.state_dict())
+        # Initialize the new layers with the same weights as the original layers
+        nores_self_output.load_state_dict(module.attention.output.state_dict())
+        nores_output.load_state_dict(module.output.state_dict())
 
-            module.attention.output = nores_self_output
-            module.output = nores_output
+        # Replace the original layers with the new ones
+        module.attention.output = nores_self_output
+        module.output = nores_output
+
+    # Note: We create new classes for the self-output and output layers instead just
+    # overwriting the forward method of the original layers to avoid modifying the
+    # original class definitions
+    return model
+
+
+def initialize_distilroberta_enhanced_pooler(model: nn.Module) -> nn.Module:
+    """Initialize the distilroberta model with an enhanced pooling layer."""
+
+    # The original dense layer of the pooler is a single linear layer from the hidden size to 1
+    # We replace it with a sequential layer of 2 linear layers with a tanh activation and a dropout
+    model.pooler.dense = nn.Sequential(
+        nn.Linear(model.pooler.dense.in_features, model.pooler.dense.in_features // 2),
+        nn.Tanh(),
+        nn.Dropout(0.1),
+        nn.Linear(model.pooler.dense.in_features // 2, 1),
+    )
     return model
 
 
@@ -126,22 +149,57 @@ def get_distilroberta_nores() -> nn.Module:
 # ==========================
 
 
-def get_boolq_validation_metric_str(metric_dict: dict) -> str:
+def compute_binary_metrics(
+    labels: List[int], predictions: List[int]
+) -> Dict[str, float]:
+    """Compute binary classification metrics for the given labels and predictions."""
+    metrics = {
+        "acc": accuracy_score(labels, predictions),
+        "f1": f1_score(labels, predictions, zero_division=0, average="macro"),
+    }
+    return metrics
+
+
+def compute_regression_metrics(
+    labels: List[float], predictions: List[float]
+) -> Dict[str, float]:
+    """Compute regression metrics for the given labels and predictions."""
+    metrics = {
+        "mae": mean_absolute_error(labels, predictions),
+        "r": pearsonr(labels, predictions)[0],
+    }
+    return metrics
+
+
+def format_binary_metrics(metric_dict: dict) -> str:
     return f"""boolq validation set:
- distilRB-rand: overall acc: {metric_dict["rand"]["accuracy"]:.3f}, f1: {metric_dict["rand"]["f1"]:.3f}
- distilroberta: overall acc: {metric_dict["base"]["accuracy"]:.3f}, f1: {metric_dict["base"]["f1"]:.3f}
-  distilRB-KQV: overall acc: {metric_dict["kqv"]["accuracy"]:.3f}, f1: {metric_dict["kqv"]["f1"]:.3f}
-distilRB-nores: overall acc: {metric_dict["nores"]["accuracy"]:.3f}, f1: {metric_dict["nores"]["f1"]:.3f}"""
+ distilRB-rand: overall acc: {metric_dict["rand"]["acc"]:.3f}, f1: {metric_dict["rand"]["f1"]:.3f}
+ distilroberta: overall acc: {metric_dict["base"]["acc"]:.3f}, f1: {metric_dict["base"]["f1"]:.3f}
+  distilRB-KQV: overall acc: {metric_dict["kqv"]["acc"]:.3f}, f1: {metric_dict["kqv"]["f1"]:.3f}
+distilRB-nores: overall acc: {metric_dict["nores"]["acc"]:.3f}, f1: {metric_dict["nores"]["f1"]:.3f}"""
 
 
-def get_sst_metric_str(metric_dict: dict) -> str:
-    return f"""Validation: mae: {metric_dict["base"]["mae_val"]:.3f}, r: {metric_dict["base"]["pearson_val"]:.3f}
-      Test: mae: {metric_dict["base"]["mae"]:.3f}, r: {metric_dict["base"]["pearson"]:.3f}
+def format_regression_metrics(metric_dict: dict) -> str:
+    return f"""Validation: mae: {metric_dict["base"]["mae_val"]:.3f}, r: {metric_dict["base"]["r_val"]:.3f}
+      Test: mae: {metric_dict["base"]["mae"]:.3f}, r: {metric_dict["base"]["r"]:.3f}
 
 SST test set:
- distilRB-rand: mae: {metric_dict["rand"]["mae"]:.3f}, r: {metric_dict["rand"]["pearson"]:.3f}
-  distilRB-KQV: mae: {metric_dict["kqv"]["mae"]:.3f}, r: {metric_dict["kqv"]["pearson"]:.3f}
-distilRB-nores: mae: {metric_dict["nores"]["mae"]:.3f}, r: {metric_dict["nores"]["pearson"]:.3f}"""
+ distilRB-rand: mae: {metric_dict["rand"]["mae"]:.3f}, r: {metric_dict["rand"]["r"]:.3f}
+  distilRB-KQV: mae: {metric_dict["kqv"]["mae"]:.3f}, r: {metric_dict["kqv"]["r"]:.3f}
+distilRB-nores: mae: {metric_dict["nores"]["mae"]:.3f}, r: {metric_dict["nores"]["r"]:.3f}"""
+
+
+def format_improved_metrics(
+    binary_metric_dict: dict, regression_metric_dict: dict
+) -> str:
+    # Note: We print distilroberta metrics for reference as it is the best performing givenmodel among the ones we fine-tuned
+    return f"""boolq validation set:
+distilroberta: overall acc: {binary_metric_dict["base"]["acc"]:.3f}, f1: {binary_metric_dict["base"]["f1"]:.3f}
+distilRB-improved: overall acc: {binary_metric_dict["improved"]["acc"]:.3f}, f1: {binary_metric_dict["improved"]["f1"]:.3f}
+
+SST test set:
+distilroberta: mae: {regression_metric_dict["base"]["mae"]:.3f}, r: {regression_metric_dict["base"]["r"]:.3f}
+distilRB-improved: mae: {regression_metric_dict["improved"]["mae"]:.3f}, r: {regression_metric_dict["improved"]["r"]:.3f}"""
 
 
 # ==========================
@@ -154,12 +212,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 2"
     )
-    parser.add_argument("--batch_size", type=int, default=48)
-    parser.add_argument("--epochs", type=int, default=5)
-    parser.add_argument("--lr", type=float, default=5e-5)
-    parser.add_argument("--weight_decay", type=float, default=1e-2)
-    parser.add_argument("--context_length", type=int, default=256)
-    parser.add_argument("--save_model", action="store_true", default=False)
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--weight_decay", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p2_murugan_116745378")
     parser.add_argument("--use_subset", action="store_true", default=False)
@@ -170,20 +225,23 @@ def main() -> None:
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     print(f"Using device: {device}")
-    dataloader_args = {
-        "context_length": args.context_length,
-        "batch_size": args.batch_size,
+    roberta_dataloader_config = {
+        "model_name": "distilroberta-base",
+        "padding_side": "right",  # Right padding used for encoder models
+        "truncation_side": "left",  # Left truncation used for preserve the question tokens
     }
-    distilroberta_dataloader_args = {
-        "model": "distilroberta-base",
-        "padding_side": "right",
-        "truncation_side": "left",
-        **dataloader_args,
+    boolq_config = {
+        "context_length": 256,
+        "batch_size": 8,
     }
-    optimizer_args = {"lr": args.lr, "weight_decay": args.weight_decay}
+    sst_config = {
+        "context_length": 128,
+        "batch_size": 16,
+    }
     trainer_args = {
-        "epochs": args.epochs,
-        "save_model": args.save_model,
+        "device": device,
+        "lr": args.lr,
+        "weight_decay": args.weight_decay,
     }
 
     # Create and open output file
@@ -193,122 +251,176 @@ def main() -> None:
 
     print("Creating model function map...")
     model_func_map = {
-        "rand": get_distilroberta_rand,
-        "base": get_distilroberta,
-        "kqv": get_distilroberta_kqv,
-        "nores": get_distilroberta_nores,
+        "rand": initialize_distilroberta_random,
+        "kqv": initialize_distilroberta_shared_kqv,
+        "nores": initialize_distilroberta_no_residual,
+        "improved": initialize_distilroberta_enhanced_pooler,
     }
 
     # Load data
     outfile.write("Checkpoint 2.2:\n")
-    train_data, train_labels = process_boolq(
-        "train", append_answer=False, subset=args.use_subset
+    print("Loading BoolQ train and validation data...")
+    train_data, train_labels = load_and_preprocess_boolq(
+        "train", subset=args.use_subset
     )
-    train_loader = get_dataloader(
-        train_data, train_labels, **distilroberta_dataloader_args
+    train_loader = create_dataloader(
+        train_data,
+        train_labels,
+        **boolq_config,
+        **roberta_dataloader_config,
     )
-    val_data, val_labels = process_boolq(
-        "validation", append_answer=False, subset=args.use_subset
+    val_data, val_labels = load_and_preprocess_boolq(
+        "validation", subset=args.use_subset
     )
-    val_loader = get_dataloader(val_data, val_labels, **distilroberta_dataloader_args)
+    val_loader = create_dataloader(
+        val_data,
+        val_labels,
+        **boolq_config,
+        **roberta_dataloader_config,
+    )
 
-    metric_dict = {}
+    binary_metric_dict = {}
+    print("Fine-tuning models on BoolQ...")
     for model_name in ["rand", "base", "kqv", "nores"]:
-        model = model_func_map[model_name]()
-        # TODO: autocast seems to be incompatible with BCELoss
-        model.pooler.dense = nn.Linear(model.config.hidden_size, 1)
-        model.pooler.activation = nn.Identity()
-        model.to(device)
+        print(f"Fine-tuning distilroberta-{model_name} on BoolQ...")
+        model = load_distilroberta_pretrained()
+        if model_name != "base":
+            model = model_func_map[model_name](model)
+        trainer = Trainer(model, "classification", "fine-tuning", **trainer_args)
 
         # Define loss function and optimizer
         if model_name != "rand":
-            loss_fn = nn.BCEWithLogitsLoss()
-            optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
-
-            losses = train_model(
-                model,
-                train_loader,
-                val_loader,
-                loss_fn,
-                optimizer,
-                device,
-                **trainer_args,
+            losses = trainer.train(
+                train_loader, args.epochs, f"Fine-tuning {model_name} on boolq"
             )
-            plot_loss_and_accuracy(
+            plot_training_loss(
                 *losses,
-                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}_classification.png",
+                f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_{model_name}_classification.png",
             )
-        label_pred = model_inference(
-            model, val_loader, None, device, f"Finetuned DistilRoBERTa {model_name}"
-        )
-        metric_dict[model_name] = {
-            "accuracy": accuracy_score(val_labels, label_pred),
-            "f1": f1_score(val_labels, label_pred, average="macro"),
-        }
-    outfile.write(get_boolq_validation_metric_str(metric_dict) + "\n\n")
+        print(f"Evaluating distilroberta-{model_name} on BoolQ validation set...")
+        label_pred = trainer.inference(val_loader)
+        binary_metric_dict[model_name] = compute_binary_metrics(val_labels, label_pred)
+    outfile.write(format_binary_metrics(binary_metric_dict) + "\n\n")
 
     outfile.write("Checkpoint 2.3:\n")
-    train_data, train_values = process_sst("train", subset=args.use_subset)
-    train_loader = get_dataloader(
-        train_data, train_values, **distilroberta_dataloader_args
+    print("Loading SST train, validation, and test data...")
+    train_data, train_values = load_and_preprocess_sst("train", subset=args.use_subset)
+    train_loader = create_dataloader(
+        train_data,
+        train_values,
+        **sst_config,
+        **roberta_dataloader_config,
     )
-    val_data, val_values = process_sst("validation", subset=args.use_subset)
-    val_loader = get_dataloader(val_data, val_values, **distilroberta_dataloader_args)
-    test_data, test_values = process_sst("test", subset=args.use_subset)
-    test_loader = get_dataloader(
-        test_data, test_values, **distilroberta_dataloader_args
+    val_data, val_values = load_and_preprocess_sst("validation", subset=args.use_subset)
+    val_loader = create_dataloader(
+        val_data,
+        val_values,
+        **sst_config,
+        **roberta_dataloader_config,
     )
-    metric_dict = {}
+    test_data, test_values = load_and_preprocess_sst("test", subset=args.use_subset)
+    test_loader = create_dataloader(
+        test_data,
+        test_values,
+        **sst_config,
+        **roberta_dataloader_config,
+    )
+    regression_metric_dict = {}
+    print("Fine-tuning models on SST...")
     for model_name in ["rand", "base", "kqv", "nores"]:
-        model = model_func_map[model_name]()
-        model.pooler.dense = nn.Linear(model.config.hidden_size, 1)
-        model.pooler.activation = nn.Sigmoid()
-        model.to(device)
+        print(f"Fine-tuning distilroberta-{model_name} on SST...")
+        model = load_distilroberta_pretrained()
+        if model_name != "base":
+            model = model_func_map[model_name](model)
+        trainer = Trainer(model, "regression", "fine-tuning", **trainer_args)
 
         if model_name != "rand":
-            loss_fn = nn.MSELoss()
-            optimizer = torch.optim.AdamW(model.pooler.parameters(), **optimizer_args)
-
-            losses = train_model(
-                model,
-                train_loader,
-                val_loader,
-                loss_fn,
-                optimizer,
-                device,
-                **trainer_args,
+            losses = trainer.train(
+                train_loader, args.epochs, f"Fine-tuning {model_name} on sst"
             )
-            plot_loss_and_accuracy(
+            plot_training_loss(
                 *losses,
-                f"{args.save_dir}/{args.file_prefix}_loss_accuracy_distilroberta_{model_name}_regression.png",
+                f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_{model_name}_regression.png",
             )
-
-        output = model_inference(
-            model,
-            test_loader,
-            None,
-            device,
-            f"Finetuned DistilRoBERTa {model_name}",
-            regression=True,
+        print(f"Evaluating distilroberta-{model_name} on SST test set...")
+        output = trainer.inference(test_loader)
+        regression_metric_dict[model_name] = compute_regression_metrics(
+            test_values, output
         )
-        metric_dict[model_name] = {
-            "mae": mean_absolute_error(test_values, output),
-            "pearson": pearsonr(test_values, output)[0],
-        }
         if model_name == "base":
-            output = model_inference(
-                model,
-                val_loader,
-                None,
-                device,
-                f"Finetuned DistilRoBERTa {model_name}",
-                regression=True,
-            )
-            metric_dict[model_name]["mae_val"] = mean_absolute_error(val_values, output)
-            metric_dict[model_name]["pearson_val"] = pearsonr(val_values, output)[0]
+            print(f"Evaluating distilroberta-{model_name} on SST validation set...")
+            output = trainer.inference(val_loader)
+            val_metric_dict = compute_regression_metrics(val_values, output)
+            regression_metric_dict[model_name]["mae_val"] = val_metric_dict["mae"]
+            regression_metric_dict[model_name]["r_val"] = val_metric_dict["r"]
 
-    outfile.write(get_sst_metric_str(metric_dict) + "\n")
+    outfile.write(format_regression_metrics(regression_metric_dict) + "\n\n")
 
+    # Fine-tuning improved model on BoolQ
+    outfile.write("Checkpoint 2.4: Extra Credit\n")
+    print("Loading BoolQ train and validation data for improved model...")
+    train_data, train_values = load_and_preprocess_boolq(
+        "train", subset=args.use_subset
+    )
+    train_loader = create_dataloader(
+        train_data,
+        train_values,
+        **boolq_config,
+        **roberta_dataloader_config,
+    )
+    val_data, val_values = load_and_preprocess_boolq(
+        "validation", subset=args.use_subset
+    )
+    val_loader = create_dataloader(
+        val_data,
+        val_values,
+        **boolq_config,
+        **roberta_dataloader_config,
+    )
+
+    print("Fine-tuning improved model on BoolQ...")
+    model = load_distilroberta_pretrained()
+    model = initialize_distilroberta_enhanced_pooler(model)
+    trainer = Trainer(model, "classification", "fine-tuning", **trainer_args)
+    losses = trainer.train(train_loader, args.epochs, f"Fine-tuning improved on boolq")
+    plot_training_loss(
+        *losses,
+        f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_improved_classification.png",
+    )
+    print(f"Evaluating improved model on BoolQ validation set...")
+    label_pred = trainer.inference(val_loader)
+    binary_metric_dict["improved"] = compute_binary_metrics(val_values, label_pred)
+
+    # Fine-tuning improved model on SST
+    print("Loading SST train and test data for improved model...")
+    train_data, train_values = load_and_preprocess_sst("train", subset=args.use_subset)
+    train_loader = create_dataloader(
+        train_data,
+        train_values,
+        **sst_config,
+        **roberta_dataloader_config,
+    )
+    test_data, test_values = load_and_preprocess_sst("test", subset=args.use_subset)
+    test_loader = create_dataloader(
+        test_data,
+        test_values,
+        **sst_config,
+        **roberta_dataloader_config,
+    )
+
+    print("Fine-tuning improved model on SST...")
+    model = load_distilroberta_pretrained()
+    model = initialize_distilroberta_enhanced_pooler(model)
+    trainer = Trainer(model, "regression", "fine-tuning", **trainer_args)
+    losses = trainer.train(train_loader, args.epochs, f"Fine-tuning improved on sst")
+    plot_training_loss(
+        *losses,
+        f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_improved_regression.png",
+    )
+    print(f"Evaluating improved model on SST test set...")
+    output = trainer.inference(test_loader)
+    regression_metric_dict["improved"] = compute_regression_metrics(test_values, output)
+    outfile.write(format_improved_metrics(binary_metric_dict, regression_metric_dict))
     # Close output file
     print("Closing output file...")
     outfile.close()
@@ -318,20 +430,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-    input = torch.randint(0, 50257, (5, 256))
-
-    model = get_distilroberta_rand()
-    output = model(input).logits
-    print(f"input shape: {input.shape}")
-    print(f"output shape: {output.shape}")
-
-    model = get_distilroberta_kqv()
-    output = model(input).logits
-    print(f"input shape: {input.shape}")
-    print(f"output shape: {output.shape}")
-
-    model = get_distilroberta_nores()
-    output = model(input).logits
-    print(f"input shape: {input.shape}")
-    print(f"output shape: {output.shape}")
