@@ -166,7 +166,7 @@ def main() -> None:
         "text-generation",
         model=args.model_id,
         device=device,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
     )
 
     print("Generating responses...")

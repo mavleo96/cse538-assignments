@@ -7,13 +7,17 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from datasets import load_dataset
+from scipy.stats import pearsonr
+from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error
+
 from a3_p1_murugan_116745378 import (Trainer, create_dataloader,
                                      load_and_preprocess_boolq,
                                      load_distilroberta_pretrained,
                                      plot_training_loss)
-from datasets import load_dataset
-from scipy.stats import pearsonr
-from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error
+
+# Enable TF32 tensor cores for better performance
+torch.set_float32_matmul_precision("high")
 
 np.random.seed(42)
 torch.manual_seed(42)
