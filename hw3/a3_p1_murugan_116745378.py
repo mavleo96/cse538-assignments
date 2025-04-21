@@ -43,13 +43,11 @@ def get_distilgpt2_special_token_ids() -> Tuple[int, int, int]:
 
 # This function is also used in a1_p2_murugan_116745378.py
 def load_and_preprocess_boolq(
-    split: str, append_answer: bool = False, subset: bool = False
+    split: str, append_answer: bool = False
 ) -> Tuple[List[str], List[int]]:
     """Load and preprocess the BoolQ dataset for binary classification."""
     boolq_dataset = load_dataset("google/boolq")
     data = boolq_dataset[split]
-    if subset:
-        data = data.select(range(1600 if split == "train" else 800))
     if append_answer:
         li = [
             f"{x['passage']}.\n{x['question']}?\n{'yes' if x['answer'] else 'no'}"
@@ -377,7 +375,6 @@ def main() -> None:
     parser.add_argument("--weight_decay", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p1_murugan_116745378")
-    parser.add_argument("--use_subset", action="store_true", default=False)
     args = parser.parse_args()
     device = (
         "cuda"
@@ -420,9 +417,7 @@ def main() -> None:
 
     # Load datasets
     print("Loading BoolQ validation dataset...")
-    val_data, val_labels = load_and_preprocess_boolq(
-        "validation", subset=args.use_subset
-    )
+    val_data, val_labels = load_and_preprocess_boolq("validation")
     val_loader = create_dataloader(val_data, val_labels, **gpt2_dataloader_config)
 
     # Get token ids for yes and no
@@ -438,9 +433,7 @@ def main() -> None:
     # Instruct-tune distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.2:\n")
     print("Loading BoolQ training dataset...")
-    train_data, train_labels = load_and_preprocess_boolq(
-        "train", append_answer=True, subset=args.use_subset
-    )
+    train_data, train_labels = load_and_preprocess_boolq("train", append_answer=True)
     train_loader = create_dataloader(train_data, train_labels, **gpt2_dataloader_config)
 
     print("Instruct-tuning distilgpt2 on BoolQ...")
@@ -461,15 +454,11 @@ def main() -> None:
 
     outfile.write("Checkpoint 1.4:\n")
     print("Loading BoolQ training dataset without answer...")
-    train_data, train_labels = load_and_preprocess_boolq(
-        "train", subset=args.use_subset
-    )
+    train_data, train_labels = load_and_preprocess_boolq("train")
     train_loader = create_dataloader(
         train_data, train_labels, **roberta_dataloader_config
     )
-    val_data, val_labels = load_and_preprocess_boolq(
-        "validation", subset=args.use_subset
-    )
+    val_data, val_labels = load_and_preprocess_boolq("validation")
     val_loader = create_dataloader(val_data, val_labels, **roberta_dataloader_config)
 
     print("Loading DistilRoBERTa model...")
