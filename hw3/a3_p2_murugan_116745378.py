@@ -27,13 +27,9 @@ torch.manual_seed(42)
 # ==========================
 
 
-def load_and_preprocess_sst(
-    split: str, subset: bool = False
-) -> Tuple[List[str], List[float]]:
+def load_and_preprocess_sst(split: str) -> Tuple[List[str], List[float]]:
     """Load and preprocess the Stanford Sentiment Treebank dataset for sentiment analysis."""
     data = load_dataset("stanfordnlp/sst")[split]
-    if subset:
-        data = data.select(range(800))
     return data["sentence"], data["label"]
 
 
@@ -221,7 +217,6 @@ def main() -> None:
     parser.add_argument("--weight_decay", type=float, default=1e-3)
     parser.add_argument("--save_dir", type=str, default="results")
     parser.add_argument("--file_prefix", type=str, default="a3_p2_murugan_116745378")
-    parser.add_argument("--use_subset", action="store_true", default=False)
     args = parser.parse_args()
     device = (
         "cuda"
@@ -264,18 +259,14 @@ def main() -> None:
     # Load data
     outfile.write("Checkpoint 2.2:\n")
     print("Loading BoolQ train and validation data...")
-    train_data, train_labels = load_and_preprocess_boolq(
-        "train", subset=args.use_subset
-    )
+    train_data, train_labels = load_and_preprocess_boolq("train")
     train_loader = create_dataloader(
         train_data,
         train_labels,
         **boolq_config,
         **roberta_dataloader_config,
     )
-    val_data, val_labels = load_and_preprocess_boolq(
-        "validation", subset=args.use_subset
-    )
+    val_data, val_labels = load_and_preprocess_boolq("validation")
     val_loader = create_dataloader(
         val_data,
         val_labels,
@@ -305,21 +296,21 @@ def main() -> None:
 
     outfile.write("Checkpoint 2.3:\n")
     print("Loading SST train, validation, and test data...")
-    train_data, train_values = load_and_preprocess_sst("train", subset=args.use_subset)
+    train_data, train_values = load_and_preprocess_sst("train")
     train_loader = create_dataloader(
         train_data,
         train_values,
         **sst_config,
         **roberta_dataloader_config,
     )
-    val_data, val_values = load_and_preprocess_sst("validation", subset=args.use_subset)
+    val_data, val_values = load_and_preprocess_sst("validation")
     val_loader = create_dataloader(
         val_data,
         val_values,
         **sst_config,
         **roberta_dataloader_config,
     )
-    test_data, test_values = load_and_preprocess_sst("test", subset=args.use_subset)
+    test_data, test_values = load_and_preprocess_sst("test")
     test_loader = create_dataloader(
         test_data,
         test_values,
@@ -367,18 +358,14 @@ def main() -> None:
     # Fine-tuning improved model on BoolQ
     outfile.write("Checkpoint 2.4: Extra Credit\n")
     print("Loading BoolQ train and validation data for improved model...")
-    train_data, train_values = load_and_preprocess_boolq(
-        "train", subset=args.use_subset
-    )
+    train_data, train_values = load_and_preprocess_boolq("train")
     train_loader = create_dataloader(
         train_data,
         train_values,
         **boolq_config,
         **roberta_dataloader_config,
     )
-    val_data, val_values = load_and_preprocess_boolq(
-        "validation", subset=args.use_subset
-    )
+    val_data, val_values = load_and_preprocess_boolq("validation")
     val_loader = create_dataloader(
         val_data,
         val_values,
@@ -398,14 +385,14 @@ def main() -> None:
 
     # Fine-tuning improved model on SST
     print("Loading SST train and test data for improved model...")
-    train_data, train_values = load_and_preprocess_sst("train", subset=args.use_subset)
+    train_data, train_values = load_and_preprocess_sst("train")
     train_loader = create_dataloader(
         train_data,
         train_values,
         **sst_config,
         **roberta_dataloader_config,
     )
-    test_data, test_values = load_and_preprocess_sst("test", subset=args.use_subset)
+    test_data, test_values = load_and_preprocess_sst("test")
     test_loader = create_dataloader(
         test_data,
         test_values,
