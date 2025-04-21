@@ -207,7 +207,8 @@ Make two distinct new versions of distilroberta by altering the last 2 transform
 
 - 2.1.2 distilRB-KQV: Alter self-attention such that it only has a single set of weights for the query, key, and value. Initialize the shared KQV linear layer weights to be the mean of the pretrained key and query weights.
 
-- 2.1.3 distilRB-nores: Alter the transformer such that it has no residual link, removing the "add" residuals step but keeping the "norm" (see red "X"s in the figure of the standard transformer encoder). Thus, it has no summation with the previous layer's output, but it should still maintain the normalization steps.
+- 2.1.3 distilRB-nores: Alter the transformer such that it has no residual link, removing the "add" residuals step but keeping the "norm" (see red "X"s in the figure of the standard transformer encoder). Thus, it has no summation with the previous layer's output, but it should still maintain the normalization steps.<br>
+<img src="assets/distilroberta_nores.png" width=200>
 
 Apply these changes independently on new model instances (only one at a time: so distilRB-KQV is built from distilroberta directly and not from distilRB-rand, and distilRB-nores is built from distilroberta with its weights and not from distilRB-KQV). This way, you can test the effect each has on the accuracy of the model with only the one change that each makes.
 
