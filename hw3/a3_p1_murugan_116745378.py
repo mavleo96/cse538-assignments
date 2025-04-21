@@ -17,6 +17,9 @@ from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, GPT2LMHeadModel, RobertaModel
 
+# Enable TF32 tensor cores for better performance
+torch.set_float32_matmul_precision("high")
+
 np.random.seed(0)
 torch.manual_seed(0)
 
@@ -163,11 +166,13 @@ class Trainer:
 
         self.device = device
         self.model.to(device)
+        # Compile the model for better performance
+        self.model = torch.compile(self.model, mode="reduce-overhead")
 
     def _forward(
         self, X: torch.Tensor, attn_mask: torch.Tensor, y: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        with torch.amp.autocast(device_type=self.device, dtype=torch.bfloat16):
+        with torch.amp.autocast(device_type=self.device, dtype=torch.float16):
             if self.task_type == "instruct-tuning":
                 # Remove the last token from the input and attention mask
                 output = self.model(X[:, :-1], attention_mask=attn_mask[:, :-1])
