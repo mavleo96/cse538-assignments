@@ -283,8 +283,8 @@ def main() -> None:
         **roberta_dataloader_config,
     )
 
-    binary_metric_dict = {}
     print("Fine-tuning models on BoolQ...")
+    binary_metric_dict = {}
     for model_name in ["rand", "base", "kqv", "nores"]:
         print(f"Fine-tuning distilroberta-{model_name} on BoolQ...")
         model = load_distilroberta_pretrained()
@@ -297,10 +297,7 @@ def main() -> None:
             losses = trainer.train(
                 train_loader, args.epochs, f"Fine-tuning {model_name} on boolq"
             )
-            plot_training_loss(
-                *losses,
-                f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_{model_name}_classification.png",
-            )
+
         print(f"Evaluating distilroberta-{model_name} on BoolQ validation set...")
         label_pred = trainer.inference(val_loader)
         binary_metric_dict[model_name] = compute_binary_metrics(val_labels, label_pred)
@@ -329,6 +326,8 @@ def main() -> None:
         **sst_config,
         **roberta_dataloader_config,
     )
+
+    # Fine-tuning models on SST
     regression_metric_dict = {}
     print("Fine-tuning models on SST...")
     for model_name in ["rand", "base", "kqv", "nores"]:
@@ -338,20 +337,25 @@ def main() -> None:
             model = model_func_map[model_name](model)
         trainer = Trainer(model, "regression", "fine-tuning", **trainer_args)
 
+        # Only fine-tune the model if it is not the random initialized model
         if model_name != "rand":
             losses = trainer.train(
                 train_loader, args.epochs, f"Fine-tuning {model_name} on sst"
             )
-            plot_training_loss(
-                *losses,
-                f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_{model_name}_regression.png",
-            )
+            if model_name == "base":
+                # Plot the training loss for the base model
+                title = "Finetuning distilroberta-base on SST"
+                filename = f"{args.save_dir}/finetuning_loss_plot_distilroberta_base_regression.png"
+                plot_training_loss(*losses, title, filename)
+                outfile.write(f"Training plot saved to {filename}\n")
+
         print(f"Evaluating distilroberta-{model_name} on SST test set...")
         output = trainer.inference(test_loader)
         regression_metric_dict[model_name] = compute_regression_metrics(
             test_values, output
         )
         if model_name == "base":
+            # Evaluate the base model on the validation set
             print(f"Evaluating distilroberta-{model_name} on SST validation set...")
             output = trainer.inference(val_loader)
             val_metric_dict = compute_regression_metrics(val_values, output)
@@ -387,10 +391,7 @@ def main() -> None:
     model = initialize_distilroberta_enhanced_pooler(model)
     trainer = Trainer(model, "classification", "fine-tuning", **trainer_args)
     losses = trainer.train(train_loader, args.epochs, f"Fine-tuning improved on boolq")
-    plot_training_loss(
-        *losses,
-        f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_improved_classification.png",
-    )
+
     print(f"Evaluating improved model on BoolQ validation set...")
     label_pred = trainer.inference(val_loader)
     binary_metric_dict["improved"] = compute_binary_metrics(val_values, label_pred)
@@ -417,14 +418,12 @@ def main() -> None:
     model = initialize_distilroberta_enhanced_pooler(model)
     trainer = Trainer(model, "regression", "fine-tuning", **trainer_args)
     losses = trainer.train(train_loader, args.epochs, f"Fine-tuning improved on sst")
-    plot_training_loss(
-        *losses,
-        f"{args.save_dir}/finetuning_loss_accuracy_distilroberta_improved_regression.png",
-    )
+
     print(f"Evaluating improved model on SST test set...")
     output = trainer.inference(test_loader)
     regression_metric_dict["improved"] = compute_regression_metrics(test_values, output)
     outfile.write(format_improved_metrics(binary_metric_dict, regression_metric_dict))
+
     # Close output file
     print("Closing output file...")
     outfile.close()
