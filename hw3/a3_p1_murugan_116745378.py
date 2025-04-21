@@ -364,7 +364,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 1"
     )
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--weight_decay", type=float, default=1e-3)
@@ -414,7 +414,7 @@ def main() -> None:
     # Load datasets
     print("Loading BoolQ validation dataset...")
     val_data, val_labels = load_and_preprocess_boolq(
-        "validation", append_answer=False, subset=args.use_subset
+        "validation", subset=args.use_subset
     )
     val_loader = create_dataloader(val_data, val_labels, **gpt2_dataloader_config)
 
@@ -440,11 +440,9 @@ def main() -> None:
     losses = trainer.train(
         train_loader, args.epochs, "Instruct-tuning distilgpt2 on BoolQ"
     )
-    plot_training_loss(
-        *losses, f"{args.save_dir}/{args.file_prefix}_loss_distilgpt2.png"
-    )
+    plot_training_loss(*losses, f"{args.save_dir}/instructtuning_loss_distilgpt2.png")
     outfile.write(
-        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_distilgpt2.png\n\n"
+        f"Training plot saved to {args.save_dir}/instructtuning_loss_distilgpt2.png\n\n"
     )
 
     # Zero-shot accuracy of instruct-tuned distilgpt2 on BoolQ
@@ -457,13 +455,13 @@ def main() -> None:
     outfile.write("Checkpoint 1.4:\n")
     print("Loading BoolQ training dataset without answer...")
     train_data, train_labels = load_and_preprocess_boolq(
-        "train", append_answer=False, subset=args.use_subset
+        "train", subset=args.use_subset
     )
     train_loader = create_dataloader(
         train_data, train_labels, **roberta_dataloader_config
     )
     val_data, val_labels = load_and_preprocess_boolq(
-        "validation", append_answer=False, subset=args.use_subset
+        "validation", subset=args.use_subset
     )
     val_loader = create_dataloader(val_data, val_labels, **roberta_dataloader_config)
 
@@ -475,11 +473,9 @@ def main() -> None:
     losses = trainer.train(
         train_loader, args.epochs, "Finetuning distilroberta on BoolQ"
     )
-    plot_training_loss(
-        *losses, f"{args.save_dir}/{args.file_prefix}_loss_distilroberta.png"
-    )
+    plot_training_loss(*losses, f"{args.save_dir}/finetuning_loss_distilroberta.png")
     outfile.write(
-        f"Training plot saved to {args.save_dir}/{args.file_prefix}_loss_distilroberta.png\n\n"
+        f"Training plot saved to {args.save_dir}/finetuning_loss_distilroberta.png\n\n"
     )
 
     print("Evaluating accuracy of finetuned distilroberta on BoolQ...")
