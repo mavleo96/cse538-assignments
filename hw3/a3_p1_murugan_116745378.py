@@ -320,11 +320,12 @@ def format_metrics(metrics: Dict[str, Dict[str, float]]) -> str:
 def plot_training_loss(
     epoch_losses: List[float],
     step_losses: List[float],
+    title: str,
     filename: str,
 ) -> None:
     """Plot stepwise training loss with overlaid epoch loss markers."""
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _, ax = plt.subplots(figsize=(10, 6))
     steps = list(range(1, len(step_losses) + 1))
 
     # Plot stepwise loss
@@ -347,6 +348,7 @@ def plot_training_loss(
     ax.set_ylabel("Loss")
     ax.grid(True)
     ax.legend()
+    ax.set_title(title)
     ax.set_xticks(
         epoch_steps if len(step_losses) > 20 else steps
     )  # Avoid cluttering for large step counts
@@ -445,10 +447,10 @@ def main() -> None:
     losses = trainer.train(
         train_loader, args.epochs, "Instruct-tuning distilgpt2 on BoolQ"
     )
-    plot_training_loss(*losses, f"{args.save_dir}/instructtuning_loss_distilgpt2.png")
-    outfile.write(
-        f"Training plot saved to {args.save_dir}/instructtuning_loss_distilgpt2.png\n\n"
-    )
+    title = "Instruct-tuning distilgpt2 on BoolQ"
+    filename = f"{args.save_dir}/instructtuning_loss_distilgpt2.png"
+    plot_training_loss(*losses, title, filename)
+    outfile.write(f"Training plot saved to {filename}\n\n")
 
     # Zero-shot accuracy of instruct-tuned distilgpt2 on BoolQ
     outfile.write("Checkpoint 1.3:\n")
@@ -478,10 +480,10 @@ def main() -> None:
     losses = trainer.train(
         train_loader, args.epochs, "Finetuning distilroberta on BoolQ"
     )
-    plot_training_loss(*losses, f"{args.save_dir}/finetuning_loss_distilroberta.png")
-    outfile.write(
-        f"Training plot saved to {args.save_dir}/finetuning_loss_distilroberta.png\n\n"
-    )
+    title = "Finetuning distilroberta on BoolQ"
+    filename = f"{args.save_dir}/finetuning_loss_distilroberta.png"
+    plot_training_loss(*losses, title, filename)
+    outfile.write(f"Training plot saved to {filename}\n\n")
 
     print("Evaluating accuracy of finetuned distilroberta on BoolQ...")
     label_pred = trainer.inference(val_loader)
