@@ -369,7 +369,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="script to run cse538 assignment 3 part 1"
     )
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=24)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--weight_decay", type=float, default=1e-3)
