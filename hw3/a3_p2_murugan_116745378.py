@@ -340,7 +340,9 @@ def main() -> None:
             if model_name == "base":
                 # Plot the training loss for the base model
                 title = "Finetuning distilroberta-base on SST"
-                filename = f"{args.save_dir}/finetuning_loss_plot_distilroberta_base_regression.png"
+                filename = (
+                    f"{args.save_dir}/finetuning_loss_distilroberta_base_regression.png"
+                )
                 plot_training_loss(*losses, title, filename)
                 outfile.write(f"Training plot saved to {filename}\n")
 
