@@ -1,0 +1,19 @@
+Checkpoint 3.1:
+Retrieval accuracy: 321/500 = 0.642
+
+Checkpoint 3.2:
+Results generated from meta-llama/Llama-3.2-3B-Instruct
++----------+------------+--------------------------------+-------------------------------+
+| query_id | context_id |           generated            |            actual             |
++----------+------------+--------------------------------+-------------------------------+
+|   321    |    321     |         United States          |         United States         |
+|   344    |    344     |              Lama              |            a Lama             |
+|    37    |     37     |    Small Business Big Game     |   "Small Business Big Game"   |
+|   210    |    210     | Charged particle beam weapons. | charged particle beam weapons |
+|   419    |    419     |            Agents.             |         as a scourge          |
+|   326    |    296     |            Schools             |    a university or college    |
+|   273    |    240     |               P                |               P               |
+|   208    |    209     |           Death ray            |      "teleforce" weapon       |
+|   317    |    313     |          Enthusiastic          |    friendly and supportive    |
+|   246    |    240     |         Computational          |       Decision problems       |
++----------+------------+--------------------------------+-------------------------------+
