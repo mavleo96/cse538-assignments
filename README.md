@@ -7,31 +7,28 @@ This repository contains assignments for the CSE 538 Natural Language Processing
 .
 ├── hw1
 │   ├── README.md
-│   ├── a1_exp_nb.ipynb
 │   ├── a1_p1_murugan_116745378.py
 │   ├── a1_p2_murugan_116745378.py
 │   ├── data
 │   │   ├── daily547_3pos.txt
 │   │   └── daily547_tweets.txt
-│   └── submission
-│       ├── a1_p1_murugan_116745378_OUTPUT.txt
-│       ├── a1_p2_murugan_116745378_OUTPUT.pdf
-│       └── a1_p2_murugan_116745378_OUTPUT.txt
+│   └── submission/
 ├── hw2
 │   ├── README.md
-│   ├── a2_exp_nb.ipynb
 │   ├── a2_p1_murugan_116745378.py
 │   ├── a2_p2_murugan_116745378.py
 │   ├── data
 │   │   └── songs.csv
-│   └── submission
-│       ├── a2_p1_murugan_116745378_OUTPUT.txt
-│       └── a2_p2_murugan_116745378_OUTPUT.pdf
-├── hw3/
-├── practice/
+│   └── submission/
+├── hw3
+│   ├── README.md
+│   ├── a3_p1_murugan_116745378.py
+│   ├── a3_p2_murugan_116745378.py
+│   ├── a3_p3_murugan_116745378.py
+│   ├── assets/
+│   └── submission/
 ├── .gitignore
-├── environment_linux.yml
-├── environment_mac.yml
+├── env.yml
 └── README.md
 ```
 
@@ -48,7 +45,7 @@ cd cse538-assignments
 2. Create and activate the Conda environment:
 
 ```bash
-conda env create -f environment_linux.yml
+conda env create -f env.yml
 conda activate cse538
 ```
 
@@ -81,7 +78,7 @@ The project uses Python 3.12 and includes the following main dependencies:
 - Datasets
 - Sentence Transformers
 
-All dependencies are specified in the environment YAML files.
+All dependencies are specified in the environment YAML file.
 
 ## License
 
