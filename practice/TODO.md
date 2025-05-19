@@ -1,0 +1,6 @@
+- lesk algorithmn
+- tokenizer with wordpiece
+- word2vec
+- rnn v lstm
+- tf-idf
+- attention
